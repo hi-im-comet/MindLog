@@ -1,190 +1,182 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { clsx } from 'clsx'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '@/store/authStore'
 import { apiClient } from '@/api/client'
 import { useQuery } from '@tanstack/react-query'
 import { categoriesApi } from '@/api/categories'
 
-const RESPONSE_MODES = [
+const EMOTIONS = [
   {
-    value: 'empathetic',
-    label: '공감',
-    emoji: '🤝',
-    desc: '내 감정을 판단 없이 들어줘요',
+    emoji: '💫',
+    label: '아주 좋아요',
+    response: '정말 멋진 하루네요! ✨ 오늘의 좋은 에너지를 기록해두면 힘든 날 꺼내볼 수 있어요.',
   },
   {
-    value: 'advice',
-    label: '조언',
-    emoji: '💡',
-    desc: '구체적인 방법을 알려줘요',
+    emoji: '😊',
+    label: '좋아요',
+    response: '좋은 하루를 보내고 계시는군요 😊 그 기분을 MindLog에 담아봐요.',
   },
   {
-    value: 'pattern_recognition',
-    label: '패턴 분석',
-    emoji: '🔍',
-    desc: '내 습관과 패턴을 짚어줘요',
+    emoji: '😐',
+    label: '보통이에요',
+    response: '평범한 하루도 소중한 기록이 돼요 🌱 이런 날들이 쌓여 나만의 패턴이 보여요.',
+  },
+  {
+    emoji: '😔',
+    label: '조금 힘들어요',
+    response: '오늘 하루 수고했어요 💙 이야기하고 싶은 게 있으면 언제든 들을게요.',
+  },
+  {
+    emoji: '😢',
+    label: '많이 힘들어요',
+    response: '힘든 마음을 꺼내줘서 고마워요 🫂 저와 함께 이야기해봐요, 혼자가 아니에요.',
   },
 ] as const
+
+type Phase = 'question' | 'answered' | 'done'
 
 export function Onboarding() {
   const { updateUser } = useAuthStore()
   const navigate = useNavigate()
-  const [selectedCats, setSelectedCats] = useState<string[]>([])
-  const [responseMode, setResponseMode] = useState<string>('empathetic')
+  const [phase, setPhase] = useState<Phase>('question')
+  const [selectedEmotion, setSelectedEmotion] = useState<typeof EMOTIONS[number] | null>(null)
   const [loading, setLoading] = useState(false)
-  const [step, setStep] = useState<1 | 2>(1)
+  const apiDoneRef = useRef(false)
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
     queryFn: categoriesApi.list,
   })
 
-  const toggleCat = (name: string) => {
-    setSelectedCats((prev) =>
-      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
-    )
-  }
-
-  const handleNext = () => {
-    if (step === 1) {
-      setStep(2)
-    }
+  const handleEmotionSelect = (emotion: typeof EMOTIONS[number]) => {
+    if (phase !== 'question') return
+    setSelectedEmotion(emotion)
+    setPhase('answered')
   }
 
   const handleStart = async () => {
+    if (loading) return
     setLoading(true)
     try {
-      const toSelect = selectedCats.length > 0
-        ? selectedCats
-        : categories.map((c) => c.name)
-
       await apiClient.post('/api/users/me/onboarding', {
-        selected_categories: toSelect,
-        preferred_response_mode: responseMode,
+        selected_categories: categories.length > 0 ? categories.map((c) => c.name) : [],
+        preferred_response_mode: 'empathetic',
       })
-      updateUser({ onboarding_completed: true })
-      navigate('/dashboard')
     } catch {
-      // fallback: skip onboarding API failure
-      updateUser({ onboarding_completed: true })
-      navigate('/dashboard')
-    } finally {
-      setLoading(false)
+      // API 실패해도 온보딩 완료로 처리
     }
+    updateUser({ onboarding_completed: true })
+    setPhase('done')
+    setTimeout(() => navigate('/dashboard'), 600)
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-[var(--color-bg)]">
-      <div className="w-full max-w-md">
-        {/* Progress */}
-        <div className="flex gap-2 mb-8 justify-center">
-          {[1, 2].map((s) => (
-            <div
-              key={s}
-              className={clsx(
-                'h-1.5 rounded-full transition-all duration-300',
-                s <= step ? 'bg-primary-500 w-12' : 'bg-gray-200 w-6'
-              )}
-            />
-          ))}
-        </div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: phase === 'done' ? 0 : 1 }}
+      transition={{ duration: 0.5 }}
+      className="min-h-screen flex items-center justify-center px-4 bg-[var(--color-bg)]"
+    >
+      <div className="w-full max-w-sm">
+        {/* AI 아바타 + 인사 */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="flex flex-col items-center mb-8"
+        >
+          <div className="w-16 h-16 rounded-full bg-primary-100 flex items-center justify-center text-3xl mb-4 shadow-sm">
+            🤖
+          </div>
+          <div className="space-y-2 text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="inline-block bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 text-sm text-gray-700 text-left max-w-xs"
+            >
+              안녕하세요! 저는 MindLog예요. 앞으로 매일 함께할게요 😊
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.9 }}
+              className="inline-block bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 text-sm text-gray-700 text-left max-w-xs"
+            >
+              지금 어떤 하루를 보내고 계세요?
+            </motion.div>
+          </div>
+        </motion.div>
 
-        {step === 1 && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
-            <div className="text-center">
-              <p className="text-4xl mb-3">🌱</p>
-              <h2 className="text-2xl font-bold text-gray-800">어떤 것을 기록하고 싶으세요?</h2>
-              <p className="text-gray-500 mt-2 text-sm">
-                관심 있는 카테고리를 선택해주세요. 나중에 언제든 바꿀 수 있어요.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {categories.map((cat) => {
-                const selected = selectedCats.includes(cat.name) ||
-                  (selectedCats.length === 0)
-                return (
-                  <button
-                    key={cat.id}
-                    onClick={() => toggleCat(cat.name)}
-                    className={clsx(
-                      'card p-4 text-left transition-all duration-150 border-2',
-                      selectedCats.includes(cat.name)
-                        ? 'border-primary-400 bg-primary-50'
-                        : selectedCats.length === 0
-                          ? 'border-transparent hover:border-gray-200'
-                          : 'border-transparent opacity-60 hover:opacity-100 hover:border-gray-200'
-                    )}
-                  >
-                    <span className="text-2xl">{cat.icon}</span>
-                    <p className="font-medium text-sm text-gray-700 mt-1">{cat.name}</p>
-                  </button>
-                )
-              })}
-            </div>
-
-            <button onClick={handleNext} className="btn-primary w-full">
-              다음
-            </button>
-          </motion.div>
-        )}
-
-        {step === 2 && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
-            <div className="text-center">
-              <p className="text-4xl mb-3">🤖</p>
-              <h2 className="text-2xl font-bold text-gray-800">AI 가 어떻게 대답하면 좋을까요?</h2>
-              <p className="text-gray-500 mt-2 text-sm">
-                대화를 나누고 난 뒤 AI 와 나누는 대화 스타일이에요.<br />
-                대화 중에도 언제든 바꿀 수 있어요.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              {RESPONSE_MODES.map((mode) => (
-                <button
-                  key={mode.value}
-                  onClick={() => setResponseMode(mode.value)}
-                  className={clsx(
-                    'w-full card p-4 text-left flex items-center gap-4 transition-all duration-150 border-2',
-                    responseMode === mode.value
-                      ? 'border-primary-400 bg-primary-50'
-                      : 'border-transparent hover:border-gray-200'
-                  )}
+        {/* 감정 버튼 */}
+        <AnimatePresence mode="wait">
+          {phase === 'question' && (
+            <motion.div
+              key="emotions"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-2"
+            >
+              {EMOTIONS.map((emotion, i) => (
+                <motion.button
+                  key={emotion.label}
+                  initial={{ opacity: 0, x: -16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 1.2 + i * 0.1 }}
+                  onClick={() => handleEmotionSelect(emotion)}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-white border border-gray-100 shadow-sm hover:border-primary-300 hover:bg-primary-50 transition-all duration-150 text-left group"
                 >
-                  <span className="text-3xl">{mode.emoji}</span>
-                  <div>
-                    <p className="font-semibold text-gray-800">{mode.label}</p>
-                    <p className="text-sm text-gray-500 mt-0.5">{mode.desc}</p>
-                  </div>
-                  {responseMode === mode.value && (
-                    <span className="ml-auto text-primary-500">✓</span>
-                  )}
-                </button>
+                  <span className="text-2xl group-hover:scale-110 transition-transform">
+                    {emotion.emoji}
+                  </span>
+                  <span className="text-sm font-medium text-gray-700">{emotion.label}</span>
+                </motion.button>
               ))}
-            </div>
+            </motion.div>
+          )}
 
-            <div className="flex gap-3">
-              <button onClick={() => setStep(1)} className="btn-secondary flex-1">
-                이전
-              </button>
-              <button onClick={handleStart} disabled={loading} className="btn-primary flex-1">
-                {loading ? '시작 중...' : '시작하기 🎉'}
-              </button>
-            </div>
-          </motion.div>
-        )}
+          {phase === 'answered' && selectedEmotion && (
+            <motion.div
+              key="response"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-4"
+            >
+              {/* 사용자 선택 버블 (오른쪽) */}
+              <div className="flex justify-end">
+                <div className="bg-primary-500 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm font-medium flex items-center gap-2">
+                  <span>{selectedEmotion.emoji}</span>
+                  <span>{selectedEmotion.label}</span>
+                </div>
+              </div>
+
+              {/* AI 응답 버블 */}
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 text-sm text-gray-700 leading-relaxed"
+              >
+                {selectedEmotion.response}
+              </motion.div>
+
+              {/* 시작 버튼 */}
+              <motion.button
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.7 }}
+                onClick={handleStart}
+                disabled={loading}
+                className="w-full btn-primary mt-2"
+              >
+                {loading ? '시작 중...' : 'MindLog 시작하기 🎉'}
+              </motion.button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   )
 }

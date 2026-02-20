@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { useInfiniteQuery } from '@tanstack/react-query'
+import { motion } from 'framer-motion'
+import { clsx } from 'clsx'
 import { Layout } from '@/components/shared/Layout'
 import { CalendarView } from '@/components/dashboard/CalendarView'
 import { EntryPreviewCard } from '@/components/dashboard/EntryPreviewCard'
@@ -9,20 +11,80 @@ import { useAuthStore } from '@/store/authStore'
 import { entriesApi } from '@/api/entries'
 import { iwa, ga } from '@/utils/josa'
 
+function DashboardSkeleton() {
+  return (
+    <Layout>
+      <div className="space-y-6 animate-pulse">
+        <div className="space-y-2">
+          <div className="h-8 bg-gray-100 rounded-xl w-52" />
+          <div className="h-4 bg-gray-100 rounded-xl w-36" />
+        </div>
+        <div className="h-24 bg-gray-100 rounded-2xl" />
+        <div className="h-48 bg-gray-100 rounded-2xl" />
+        <div className="space-y-3">
+          <div className="h-4 bg-gray-100 rounded-xl w-20" />
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 bg-gray-100 rounded-2xl" />
+          ))}
+        </div>
+      </div>
+    </Layout>
+  )
+}
+
+function StreakBadge({ days }: { days: number }) {
+  if (days <= 0) return null
+
+  if (days >= 3) {
+    const icon = days >= 30 ? '🏆' : days >= 14 ? '🔥' : days >= 7 ? '⭐' : '🎉'
+    const message =
+      days >= 30
+        ? '한 달 이상 이어졌어요!'
+        : days >= 14
+        ? '2주 연속이에요!'
+        : days >= 7
+        ? '일주일 연속이에요!'
+        : '3일 연속이에요!'
+    const colorClass =
+      days >= 14
+        ? 'from-amber-50 to-orange-50 border-amber-100'
+        : 'from-primary-50 to-violet-50 border-primary-100'
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className={clsx('card p-4 flex items-center gap-3 bg-gradient-to-r border', colorClass)}
+      >
+        <span className="text-2xl">{icon}</span>
+        <div>
+          <p className="font-semibold text-gray-800 text-sm">{days}일 연속 기록 중!</p>
+          <p className="text-xs text-gray-500 mt-0.5">{message} 대단해요 👏</p>
+        </div>
+      </motion.div>
+    )
+  }
+
+  return <p className="text-xs text-primary-400 -mt-2">🌱 {days}일째 기록 중</p>
+}
+
 export function Dashboard() {
   const { user } = useAuthStore()
   const aiName = user?.profile?.ai_name
+  const streakDays = user?.profile?.consecutive_days ?? 0
   const navigate = useNavigate()
   const today = format(new Date(), 'yyyy-MM-dd')
   const todayLabel = format(new Date(), 'M월 d일', { locale: ko })
 
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
     queryKey: ['entries'],
     queryFn: ({ pageParam = 1 }) => entriesApi.list({ page: pageParam as number, limit: 10 }),
     getNextPageParam: (last, pages) =>
       last.pagination.page < last.pagination.total_pages ? pages.length + 1 : undefined,
     initialPageParam: 1,
   })
+
+  if (isLoading) return <DashboardSkeleton />
 
   const allEntries = data?.pages.flatMap((p) => p.entries) ?? []
   const todayEntry = allEntries.find((e) => e.entry_date === today)
@@ -37,6 +99,9 @@ export function Dashboard() {
           </h2>
           <p className="text-gray-500 mt-1 text-sm">{todayLabel} · 오늘 어떠셨나요?</p>
         </div>
+
+        {/* Streak badge */}
+        <StreakBadge days={streakDays} />
 
         {/* Today CTA */}
         {!todayEntry ? (
@@ -53,14 +118,22 @@ export function Dashboard() {
                   {aiName ? `"${aiName}"${iwa(aiName)} 대화하기` : '오늘 대화 시작하기'}
                 </p>
                 <p className="text-sm text-gray-400 mt-0.5">
-                  {aiName ? `${aiName}${ga(aiName)} 오늘 이야기를 기다리고 있어요` : 'AI가 당신의 이야기를 기다리고 있어요'}
+                  {aiName
+                    ? `${aiName}${ga(aiName)} 오늘 이야기를 기다리고 있어요`
+                    : 'AI가 당신의 이야기를 기다리고 있어요'}
                 </p>
               </div>
             </div>
           </button>
         ) : (
           <button
-            onClick={() => navigate(todayEntry.is_draft ? `/entry/${todayEntry.entry_date}` : `/view/${todayEntry.id}`)}
+            onClick={() =>
+              navigate(
+                todayEntry.is_draft
+                  ? `/entry/${todayEntry.entry_date}`
+                  : `/view/${todayEntry.id}`,
+              )
+            }
             className="w-full card p-5 text-left hover:shadow-md transition-shadow"
           >
             <div className="flex items-center gap-3 mb-2">

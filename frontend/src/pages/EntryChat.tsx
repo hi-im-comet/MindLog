@@ -7,12 +7,16 @@ import { Layout } from '@/components/shared/Layout'
 import { ConversationPanel } from '@/components/conversation/ConversationPanel'
 import { conversationsApi } from '@/api/conversations'
 import { entriesApi } from '@/api/entries'
+import { useAuthStore } from '@/store/authStore'
 import type { ResponseMode } from '@/types/conversation'
 
 export function EntryChat() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
+  const aiName = user?.profile?.ai_name ?? undefined
+  const userName = user?.display_name ?? undefined
   const [responseMode] = useState<ResponseMode>('empathetic')
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -120,7 +124,11 @@ export function EntryChat() {
         {/* Conversation */}
         <div className="flex-1 min-h-0">
           {conversation ? (
-            <ConversationPanel conversation={conversation} />
+            <ConversationPanel
+              conversation={conversation}
+              aiName={aiName}
+              userName={userName}
+            />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-300 text-sm">
               대화를 준비하고 있어요...

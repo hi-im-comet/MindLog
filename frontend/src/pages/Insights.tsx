@@ -123,8 +123,16 @@ export function Insights() {
   if (isLoading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-48 text-gray-400">
-          <p>불러오는 중...</p>
+        <div className="max-w-2xl mx-auto space-y-5 animate-pulse">
+          <div className="flex items-center justify-between">
+            <div className="h-7 bg-gray-100 rounded-xl w-24" />
+            <div className="h-8 bg-gray-100 rounded-lg w-28" />
+          </div>
+          <div className="h-20 bg-gray-100 rounded-2xl" />
+          <div className="h-10 bg-gray-100 rounded-xl" />
+          <div className="h-40 bg-gray-100 rounded-2xl" />
+          <div className="h-48 bg-gray-100 rounded-2xl" />
+          <div className="h-36 bg-gray-100 rounded-2xl" />
         </div>
       </Layout>
     )
@@ -474,7 +482,10 @@ export function Insights() {
           <div className="space-y-4">
             <div className="card p-4">
               {patternsLoading ? (
-                <div className="text-center py-10 text-gray-400 text-sm">불러오는 중...</div>
+                <div className="space-y-3 py-2 animate-pulse">
+                  <div className="h-6 bg-gray-100 rounded-xl w-32" />
+                  <div className="h-40 bg-gray-100 rounded-xl" />
+                </div>
               ) : (
                 <PatternCalendar
                   year={calendarYear}

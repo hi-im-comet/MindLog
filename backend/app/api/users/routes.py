@@ -120,9 +120,42 @@ def complete_onboarding():
 @users_bp.route('/me', methods=['DELETE'])
 @jwt_required()
 def delete_me():
+    """계정 및 모든 데이터 완전 삭제 (Hard Delete). DB CASCADE로 연관 데이터 자동 삭제."""
     user_id = get_jwt_identity()
-    user = User.query.filter_by(id=user_id, deleted_at=None).first_or_404()
-    user.deleted_at = datetime.now(timezone.utc)
-    user.is_active = False
+    user = User.query.filter_by(id=user_id).first_or_404()
+    db.session.delete(user)
     db.session.commit()
-    return api_response({'message': '계정 삭제가 요청되었습니다.'})
+    return api_response({'message': '계정과 모든 데이터가 완전히 삭제되었습니다.'})
+
+
+@users_bp.route('/me/export', methods=['GET'])
+@jwt_required()
+def export_me():
+    """사용자 데이터 전체 내보내기."""
+    from app.models.journal_entry import JournalEntry
+    from app.models.pattern_log import PatternLog
+
+    user_id = get_jwt_identity()
+    user = User.query.filter_by(id=user_id).first_or_404()
+
+    entries = (JournalEntry.query
+               .filter_by(user_id=user_id)
+               .filter(JournalEntry.deleted_at.is_(None))
+               .order_by(JournalEntry.entry_date.desc())
+               .all())
+    patterns = (PatternLog.query
+                .filter_by(user_id=user_id)
+                .order_by(PatternLog.generated_at.desc())
+                .all())
+
+    export = {
+        'exported_at': datetime.now(timezone.utc).isoformat(),
+        'user': {
+            'display_name': user.display_name,
+            'email': user.email,
+            'created_at': user.created_at.isoformat() if user.created_at else None,
+        },
+        'entries': [e.to_dict(full=True) for e in entries],
+        'patterns': [p.to_dict() for p in patterns],
+    }
+    return api_response({'export': export})

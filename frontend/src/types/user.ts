@@ -6,6 +6,7 @@ export interface UserProfile {
   preferred_response_mode: 'empathetic' | 'advice' | 'pattern_recognition'
   ai_name: string | null
   total_entries: number
+  consecutive_days: number
   last_analysis_at: string | null
 }
 

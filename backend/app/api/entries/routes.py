@@ -69,14 +69,26 @@ def _trigger_ai_tasks(entry_id: str, user_id: str, is_draft: bool) -> None:
     from app.models.pattern_log import PatternLog
     from datetime import date as _date
 
-    # 1. total_entries 카운터 증가
+    # 1. total_entries 카운터 + 연속 기록(streak) 업데이트
+    from datetime import timedelta
     profile = UserProfile.query.filter_by(user_id=user_id).first()
     if profile:
         profile.total_entries += 1
+        # 연속 기록 계산
+        entry_obj = JournalEntry.query.get(entry_id)
+        if entry_obj:
+            e_date = entry_obj.entry_date
+            last = profile.last_entry_date
+            if last is None or e_date > last:
+                if last is None or (e_date - last).days > 1:
+                    profile.consecutive_days = 1
+                elif (e_date - last).days == 1:
+                    profile.consecutive_days = (profile.consecutive_days or 0) + 1
+                profile.last_entry_date = e_date
         try:
             db.session.commit()
         except Exception as e:
-            logger.warning(f'total_entries 업데이트 실패: {e}')
+            logger.warning(f'total_entries/streak 업데이트 실패: {e}')
             db.session.rollback()
     total = profile.total_entries if profile else 0
 

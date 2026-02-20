@@ -17,4 +17,13 @@ export const usersApi = {
     const { data } = await apiClient.patch('/api/users/me', payload)
     return data.data.user
   },
+
+  exportData: async (): Promise<any> => {
+    const { data } = await apiClient.get('/api/users/me/export')
+    return data.data.export
+  },
+
+  deleteAccount: async (): Promise<void> => {
+    await apiClient.delete('/api/users/me')
+  },
 }

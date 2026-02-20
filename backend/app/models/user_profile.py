@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from app.extensions import db
 
 
@@ -16,6 +16,8 @@ class UserProfile(db.Model):
     preferred_response_mode = db.Column(db.String(50), default='empathetic')
     ai_name = db.Column(db.String(50), nullable=True)  # 사용자가 AI에게 붙인 이름
     total_entries = db.Column(db.Integer, default=0)
+    consecutive_days = db.Column(db.Integer, default=0)
+    last_entry_date = db.Column(db.Date, nullable=True)
     last_analysis_at = db.Column(db.DateTime(timezone=True), nullable=True)
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                             onupdate=lambda: datetime.now(timezone.utc))
@@ -32,6 +34,7 @@ class UserProfile(db.Model):
             'preferred_response_mode': self.preferred_response_mode,
             'ai_name': self.ai_name,
             'total_entries': self.total_entries,
+            'consecutive_days': self.consecutive_days or 0,
             'last_analysis_at': self.last_analysis_at.isoformat() if self.last_analysis_at else None,
         }
 

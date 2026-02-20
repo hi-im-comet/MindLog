@@ -4,14 +4,17 @@ import { clsx } from 'clsx'
 import { conversationsApi } from '@/api/conversations'
 import { ResponseModeSelector } from './ResponseModeSelector'
 import { CrisisResourceBanner } from './CrisisResourceBanner'
+import { ga } from '@/utils/josa'
 import type { Conversation, ConversationMessage, ResponseMode } from '@/types/conversation'
 
 interface Props {
   conversation: Conversation
   onModeChange?: (newConv: Conversation) => void
+  aiName?: string
+  userName?: string
 }
 
-export function ConversationPanel({ conversation: initialConv, onModeChange }: Props) {
+export function ConversationPanel({ conversation: initialConv, onModeChange, aiName, userName }: Props) {
   const [conv, setConv] = useState<Conversation>(initialConv)
   const [messages, setMessages] = useState<ConversationMessage[]>(initialConv.messages ?? [])
   const [inputValue, setInputValue] = useState('')
@@ -218,6 +221,18 @@ export function ConversationPanel({ conversation: initialConv, onModeChange }: P
             onDelete={(!selectionMode && !msg.id.startsWith('optimistic-')) ? handleDeleteMessage : undefined}
           />
         ))}
+
+        {isSending && !streamingContent && (
+          <div className="flex justify-start pl-1">
+            <p className="text-xs text-gray-400 animate-pulse">
+              {aiName && userName
+                ? `${aiName}${ga(aiName)} ${userName}님의 이야기를 꼼꼼히 읽고 있어요...`
+                : aiName
+                ? `${aiName}${ga(aiName)} 읽고 있어요...`
+                : 'AI가 읽고 있어요...'}
+            </p>
+          </div>
+        )}
 
         {streamingContent && (
           <div className="flex justify-start">
