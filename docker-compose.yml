@@ -1,0 +1,75 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mindlog_postgres
+    environment:
+      POSTGRES_DB: mindlog_db
+      POSTGRES_USER: mindlog
+      POSTGRES_PASSWORD: mindlog
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mindlog -d mindlog_db']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: mindlog_redis
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mindlog_backend
+    env_file:
+      - ./backend/.env
+    environment:
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql://mindlog:mindlog@postgres:5432/mindlog_db
+      - REDIS_URL=redis://redis:6379/0
+    ports:
+      - '5000:5000'
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "flask db upgrade && gunicorn --bind 0.0.0.0:5000 --reload --workers 2 wsgi:app"
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mindlog_celery
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://mindlog:mindlog@postgres:5432/mindlog_db
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.tasks.celery_app worker --loglevel=info
+
+volumes:
+  postgres_data:

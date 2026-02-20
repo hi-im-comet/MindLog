@@ -1,0 +1,104 @@
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { GoogleOAuthProvider } from '@react-oauth/google'
+import { Login } from '@/pages/Login'
+import { Register } from '@/pages/Register'
+import { Dashboard } from '@/pages/Dashboard'
+import { Onboarding } from '@/pages/Onboarding'
+import { EntryEditor } from '@/pages/EntryEditor'
+import { EntryView } from '@/pages/EntryView'
+import { EntryChat } from '@/pages/EntryChat'
+import { Insights } from '@/pages/Insights'
+import { Settings } from '@/pages/Settings'
+import { ProtectedRoute } from '@/components/shared/ProtectedRoute'
+import { useAuthStore } from '@/store/authStore'
+import { usersApi } from '@/api/users'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,
+      retry: 1,
+    },
+  },
+})
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+
+export default function App() {
+  const { accessToken, updateUser, logout, setInitialized } = useAuthStore()
+
+  // 앱 시작 시 저장된 토큰으로 유저 정보를 서버에서 재검증
+  useEffect(() => {
+    if (!accessToken) {
+      setInitialized(true)
+      return
+    }
+
+    usersApi
+      .getMe()
+      .then((user) => {
+        updateUser(user)
+        setInitialized(true)
+      })
+      .catch(() => {
+        // 토큰 만료/무효 — client.ts 인터셉터가 이미 refresh 시도 후 logout 처리
+        logout()
+        setInitialized(true)
+      })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <Routes>
+            {/* Public */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+
+            {/* Protected */}
+            <Route
+              path="/onboarding"
+              element={<ProtectedRoute><Onboarding /></ProtectedRoute>}
+            />
+            <Route
+              path="/dashboard"
+              element={<ProtectedRoute><Dashboard /></ProtectedRoute>}
+            />
+            {/* 일기 에디터: /entry/2026-02-20 */}
+            <Route
+              path="/entry/:date"
+              element={<ProtectedRoute><EntryEditor /></ProtectedRoute>}
+            />
+            {/* 일기 뷰 (AI 요약 + 대화 진입): /view/:id */}
+            <Route
+              path="/view/:id"
+              element={<ProtectedRoute><EntryView /></ProtectedRoute>}
+            />
+            {/* AI 대화: /view/:id/chat */}
+            <Route
+              path="/view/:id/chat"
+              element={<ProtectedRoute><EntryChat /></ProtectedRoute>}
+            />
+            {/* 인사이트: /insights */}
+            <Route
+              path="/insights"
+              element={<ProtectedRoute><Insights /></ProtectedRoute>}
+            />
+            {/* 설정: /settings */}
+            <Route
+              path="/settings"
+              element={<ProtectedRoute><Settings /></ProtectedRoute>}
+            />
+
+            {/* Fallback */}
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </GoogleOAuthProvider>
+  )
+}
