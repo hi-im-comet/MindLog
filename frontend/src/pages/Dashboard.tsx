@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
@@ -9,6 +10,7 @@ import { CalendarView } from '@/components/dashboard/CalendarView'
 import { EntryPreviewCard } from '@/components/dashboard/EntryPreviewCard'
 import { useAuthStore } from '@/store/authStore'
 import { entriesApi } from '@/api/entries'
+import { usersApi } from '@/api/users'
 import { iwa, ga } from '@/utils/josa'
 
 function DashboardSkeleton() {
@@ -69,10 +71,17 @@ function StreakBadge({ days }: { days: number }) {
 }
 
 export function Dashboard() {
-  const { user } = useAuthStore()
+  const { user, updateUser } = useAuthStore()
   const aiName = user?.profile?.ai_name
   const streakDays = user?.profile?.consecutive_days ?? 0
   const navigate = useNavigate()
+
+  // 대시보드 진입 시마다 프로필 새로고침 → 스트릭 최신화
+  useEffect(() => {
+    usersApi.getMe().then((fresh) => {
+      updateUser({ profile: fresh.profile })
+    }).catch(() => {})
+  }, [])
   const today = format(new Date(), 'yyyy-MM-dd')
   const todayLabel = format(new Date(), 'M월 d일', { locale: ko })
 
@@ -145,9 +154,14 @@ export function Dashboard() {
                   임시저장
                 </span>
               )}
+              {todayEntry.is_locked && (
+                <span className="text-xs text-gray-400" title="잠긴 일기">🔒</span>
+              )}
             </div>
             <p className="text-sm text-gray-600 line-clamp-2">
-              {todayEntry.daily_summary || todayEntry.raw_content}
+              {todayEntry.is_locked
+                ? '비밀번호로 보호된 일기예요'
+                : todayEntry.daily_summary || todayEntry.raw_content}
             </p>
           </button>
         )}

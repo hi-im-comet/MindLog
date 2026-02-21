@@ -8,12 +8,15 @@ import { Layout } from '@/components/shared/Layout'
 import { useAutoSave } from '@/hooks/useAutoSave'
 import { entriesApi } from '@/api/entries'
 import { conversationsApi } from '@/api/conversations'
+import { usersApi } from '@/api/users'
+import { useAuthStore } from '@/store/authStore'
 import { CrisisResourceBanner } from '@/components/conversation/CrisisResourceBanner'
 import type { Conversation, ConversationMessage } from '@/types/conversation'
 
 export function EntryEditor() {
   const { date: dateParam } = useParams<{ date?: string }>()
   const navigate = useNavigate()
+  const { updateUser } = useAuthStore()
 
   const entryDate = dateParam || format(new Date(), 'yyyy-MM-dd')
   const dateLabel = format(new Date(entryDate + 'T00:00:00'), 'M월 d일 EEEE', { locale: ko })
@@ -170,6 +173,13 @@ export function EntryEditor() {
     if (!entryId) return
     const rawContent = userMessagesRef.current.join('\n\n')
     await entriesApi.update(entryId, { raw_content: rawContent || ' ', is_draft: false })
+    // 백엔드가 streak를 업데이트했으니 스토어를 새로고침
+    try {
+      const freshUser = await usersApi.getMe()
+      updateUser({ profile: freshUser.profile })
+    } catch {
+      // 실패해도 네비게이션은 진행
+    }
     navigate(`/view/${entryId}`)
   }
 

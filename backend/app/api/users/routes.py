@@ -25,6 +25,7 @@ class UserUpdateSchema(Schema):
     display_name = fields.String(validate=validate.Length(min=1, max=100))
     timezone = fields.String(validate=validate.Length(max=50))
     ai_name = fields.String(allow_none=True, validate=validate.Length(max=50))
+    entry_lock_enabled = fields.Boolean()
 
 
 onboarding_schema = OnboardingSchema()
@@ -52,16 +53,24 @@ def update_me():
 
     # 프로필 전용 필드 분리
     ai_name = data.pop('ai_name', ...)  # ... = field not provided
+    entry_lock_enabled = data.pop('entry_lock_enabled', ...)
 
     for key, value in data.items():
         setattr(user, key, value)
 
-    # ai_name은 UserProfile에 저장
+    # 프로필 전용 필드는 UserProfile에 저장
+    profile_updates = {}
     if ai_name is not ...:
+        profile_updates['ai_name'] = ai_name or None
+    if entry_lock_enabled is not ...:
+        profile_updates['entry_lock_enabled'] = entry_lock_enabled
+
+    if profile_updates:
         if user.profile:
-            user.profile.ai_name = ai_name or None
+            for k, v in profile_updates.items():
+                setattr(user.profile, k, v)
         else:
-            profile = UserProfile(user_id=user_id, ai_name=ai_name or None)
+            profile = UserProfile(user_id=user_id, **profile_updates)
             db.session.add(profile)
 
     db.session.commit()

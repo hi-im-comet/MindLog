@@ -5,6 +5,7 @@ export interface UpdateMePayload {
   display_name?: string
   timezone?: string
   ai_name?: string | null
+  entry_lock_enabled?: boolean
 }
 
 export const usersApi = {

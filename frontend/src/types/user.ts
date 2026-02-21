@@ -7,6 +7,7 @@ export interface UserProfile {
   ai_name: string | null
   total_entries: number
   consecutive_days: number
+  entry_lock_enabled: boolean
   last_analysis_at: string | null
 }
 

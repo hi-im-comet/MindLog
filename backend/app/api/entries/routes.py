@@ -361,6 +361,67 @@ def update_entry(entry_id):
     return api_response({'entry': entry.to_dict(full=True)})
 
 
+@entries_bp.route('/<uuid:entry_id>/lock', methods=['POST'])
+@jwt_required()
+def lock_entry(entry_id):
+    """비밀번호로 일기를 잠근다."""
+    user_id = get_jwt_identity()
+    entry = (JournalEntry.query
+             .filter_by(id=entry_id, user_id=user_id)
+             .filter(JournalEntry.deleted_at.is_(None))
+             .first_or_404())
+    data = request.get_json() or {}
+    password = data.get('password', '').strip()
+    if not password or len(password) < 4:
+        return api_error('비밀번호는 4자 이상이어야 합니다.', 400)
+    from werkzeug.security import generate_password_hash
+    entry.is_locked = True
+    entry.lock_password_hash = generate_password_hash(password)
+    db.session.commit()
+    return api_response({'entry': entry.to_dict()}, message='잠금이 설정되었습니다.')
+
+
+@entries_bp.route('/<uuid:entry_id>/unlock', methods=['POST'])
+@jwt_required()
+def unlock_entry(entry_id):
+    """비밀번호 확인 후 잠금을 영구 해제한다."""
+    user_id = get_jwt_identity()
+    entry = (JournalEntry.query
+             .filter_by(id=entry_id, user_id=user_id)
+             .filter(JournalEntry.deleted_at.is_(None))
+             .first_or_404())
+    if not entry.is_locked:
+        return api_error('잠금된 일기가 아닙니다.', 400)
+    data = request.get_json() or {}
+    password = data.get('password', '')
+    from werkzeug.security import check_password_hash
+    if not entry.lock_password_hash or not check_password_hash(entry.lock_password_hash, password):
+        return api_error('비밀번호가 일치하지 않습니다.', 401)
+    entry.is_locked = False
+    entry.lock_password_hash = None
+    db.session.commit()
+    return api_response({'entry': entry.to_dict()}, message='잠금이 해제되었습니다.')
+
+
+@entries_bp.route('/<uuid:entry_id>/verify-lock', methods=['POST'])
+@jwt_required()
+def verify_lock(entry_id):
+    """비밀번호를 검증한다 (잠금 상태는 유지, 열람만 허가)."""
+    user_id = get_jwt_identity()
+    entry = (JournalEntry.query
+             .filter_by(id=entry_id, user_id=user_id)
+             .filter(JournalEntry.deleted_at.is_(None))
+             .first_or_404())
+    if not entry.is_locked:
+        return api_response({'verified': True})
+    data = request.get_json() or {}
+    password = data.get('password', '')
+    from werkzeug.security import check_password_hash
+    if not entry.lock_password_hash or not check_password_hash(entry.lock_password_hash, password):
+        return api_error('비밀번호가 일치하지 않습니다.', 401)
+    return api_response({'verified': True})
+
+
 @entries_bp.route('/<uuid:entry_id>', methods=['DELETE'])
 @jwt_required()
 def delete_entry(entry_id):

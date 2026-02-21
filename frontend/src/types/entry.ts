@@ -15,6 +15,7 @@ export interface JournalEntry {
   energy_score: number | null
   daily_summary: string | null
   is_draft: boolean
+  is_locked: boolean
   categories: JournalCategory[]
   category_segments?: CategorySegment[]
   has_conversation: boolean

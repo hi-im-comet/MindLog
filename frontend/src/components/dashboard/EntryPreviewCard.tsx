@@ -31,9 +31,14 @@ export function EntryPreviewCard({ entry }: Props) {
                 임시저장
               </span>
             )}
+            {entry.is_locked && (
+              <span className="text-xs text-gray-400" title="잠긴 일기">🔒</span>
+            )}
           </div>
 
-          {entry.daily_summary ? (
+          {entry.is_locked ? (
+            <p className="text-sm text-gray-400 italic">비밀번호로 보호된 일기예요</p>
+          ) : entry.daily_summary ? (
             <p className="text-sm font-medium text-gray-700 line-clamp-2">{entry.daily_summary}</p>
           ) : (
             <p className="text-sm text-gray-500 line-clamp-2">{entry.raw_content}</p>

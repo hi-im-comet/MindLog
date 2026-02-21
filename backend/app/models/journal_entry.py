@@ -27,6 +27,8 @@ class JournalEntry(db.Model):
     daily_summary = db.Column(db.Text, nullable=True)
     summary_generated_at = db.Column(db.DateTime(timezone=True), nullable=True)
     is_draft = db.Column(db.Boolean, default=False)
+    is_locked = db.Column(db.Boolean, default=False)
+    lock_password_hash = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                             onupdate=lambda: datetime.now(timezone.utc))
@@ -54,6 +56,7 @@ class JournalEntry(db.Model):
             'energy_score': self.energy_score,
             'daily_summary': self.daily_summary,
             'is_draft': self.is_draft,
+            'is_locked': self.is_locked or False,
             'categories': [c.to_dict() for c in (self.categories or [])],
             'has_conversation': self.conversation is not None,
             'created_at': self.created_at.isoformat() if self.created_at else None,

@@ -5,6 +5,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
+import { clsx } from 'clsx'
+import { format, parseISO } from 'date-fns'
+import { ko } from 'date-fns/locale'
 import { Layout } from '@/components/shared/Layout'
 import { useAuthStore } from '@/store/authStore'
 import { usersApi } from '@/api/users'
@@ -15,6 +18,98 @@ const schema = z.object({
 })
 
 type FormData = z.infer<typeof schema>
+type ExportFormat = 'json' | 'txt' | 'pdf' | 'hwp'
+type ExportRange = 'all' | 'dateRange'
+
+const FORMAT_OPTIONS: { value: ExportFormat; label: string; ext: string; ready: boolean }[] = [
+  { value: 'json', label: 'JSON', ext: '.json', ready: true },
+  { value: 'txt', label: 'TXT', ext: '.txt', ready: true },
+  { value: 'pdf', label: 'PDF', ext: '.pdf', ready: true },
+  { value: 'hwp', label: 'HWP', ext: '.hwp', ready: false },
+]
+
+function buildTxt(exportData: any): string {
+  const lines: string[] = []
+  lines.push('📓 MindLog 내보내기')
+  lines.push(`내보낸 날짜: ${new Date().toLocaleDateString('ko-KR')}`)
+  lines.push(`사용자: ${exportData.user?.display_name ?? ''}`)
+  lines.push('')
+
+  for (const entry of exportData.entries ?? []) {
+    const dateStr = entry.entry_date
+      ? format(parseISO(entry.entry_date + 'T00:00:00'), 'yyyy년 M월 d일 EEEE', { locale: ko })
+      : entry.entry_date
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━')
+    lines.push(dateStr)
+    if (entry.categories?.length > 0) {
+      lines.push(`카테고리: ${entry.categories.map((c: any) => c.name).join(', ')}`)
+    }
+    lines.push('')
+    if (entry.raw_content) {
+      lines.push('[대화 내용]')
+      lines.push(entry.raw_content)
+    }
+    if (entry.category_segments?.length > 0) {
+      lines.push('')
+      lines.push('[AI 분석]')
+      for (const seg of entry.category_segments) {
+        lines.push(`${seg.category}: ${seg.content}`)
+      }
+    }
+    lines.push('')
+  }
+
+  if (exportData.patterns?.length > 0) {
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━')
+    lines.push('패턴 분석 기록')
+    lines.push('')
+    for (const p of exportData.patterns) {
+      lines.push(`[${p.log_type?.toUpperCase() ?? ''}] ${p.headline ?? ''}`)
+      lines.push(p.body ?? '')
+      lines.push('')
+    }
+  }
+
+  return lines.join('\n')
+}
+
+function openPrintWindow(exportData: any): void {
+  const entries = exportData.entries ?? []
+  const rows = entries
+    .map((entry: any) => {
+      const dateStr = entry.entry_date
+        ? format(parseISO(entry.entry_date + 'T00:00:00'), 'yyyy년 M월 d일 EEEE', { locale: ko })
+        : entry.entry_date
+      const cats =
+        entry.categories?.length > 0
+          ? `<p style="color:#888;font-size:12px;margin:4px 0 8px;">${entry.categories.map((c: any) => c.name).join(' · ')}</p>`
+          : ''
+      const content = (entry.raw_content ?? '').replace(/\n/g, '<br>')
+      const segments =
+        entry.category_segments?.length > 0
+          ? `<div style="margin-top:12px;padding:10px;background:#f8f8f8;border-radius:8px;">${entry.category_segments.map((s: any) => `<p style="margin:4px 0;font-size:13px;"><b>${s.category}</b>: ${s.content}</p>`).join('')}</div>`
+          : ''
+      return `<div style="margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid #eee;"><h3 style="margin:0 0 4px;font-size:15px;">${dateStr}</h3>${cats}<p style="font-size:14px;line-height:1.7;">${content}</p>${segments}</div>`
+    })
+    .join('')
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>MindLog 내보내기</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:720px;margin:40px auto;color:#333;} @media print{body{margin:20px;}}</style></head><body><h1 style="font-size:22px;margin-bottom:4px;">📓 MindLog</h1><p style="color:#888;font-size:13px;margin-bottom:32px;">${exportData.user?.display_name ?? ''} · ${new Date().toLocaleDateString('ko-KR')} 내보내기</p>${rows}</body></html>`
+
+  const win = window.open('', '_blank')
+  if (win) {
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    win.print()
+  }
+}
+
+function filterByDateRange(entries: any[], startDate: string, endDate: string): any[] {
+  return entries.filter((entry) => {
+    if (!entry.entry_date) return false
+    return entry.entry_date >= startDate && entry.entry_date <= endDate
+  })
+}
 
 export function Settings() {
   const { user, updateUser, logout } = useAuthStore()
@@ -23,6 +118,27 @@ export function Settings() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [exportLoading, setExportLoading] = useState(false)
+  const [lockToggling, setLockToggling] = useState(false)
+
+  const lockEnabled = user?.profile?.entry_lock_enabled ?? false
+
+  const handleToggleLock = async () => {
+    setLockToggling(true)
+    try {
+      const updated = await usersApi.updateMe({ entry_lock_enabled: !lockEnabled })
+      updateUser(updated)
+    } catch {
+      // ignore
+    } finally {
+      setLockToggling(false)
+    }
+  }
+
+  // Export options
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('json')
+  const [exportRange, setExportRange] = useState<ExportRange>('all')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
 
   const {
     register,
@@ -62,23 +178,52 @@ export function Settings() {
     }
   }
 
+  const dateRangeValid =
+    exportRange === 'all' || (startDate.length > 0 && endDate.length > 0 && startDate <= endDate)
+
   const handleExport = async () => {
+    if (exportFormat === 'hwp') return
     setExportLoading(true)
     try {
-      const exportData = await usersApi.exportData()
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-        type: 'application/json',
-      })
+      const raw = await usersApi.exportData()
+      const filteredEntries =
+        exportRange === 'dateRange' && startDate && endDate
+          ? filterByDateRange(raw.entries ?? [], startDate, endDate)
+          : (raw.entries ?? [])
+      const exportData = { ...raw, entries: filteredEntries }
+
+      const dateTag = new Date().toISOString().split('T')[0]
+
+      if (exportFormat === 'pdf') {
+        openPrintWindow(exportData)
+        return
+      }
+
+      let content: string
+      let mimeType: string
+      let filename: string
+
+      if (exportFormat === 'txt') {
+        content = buildTxt(exportData)
+        mimeType = 'text/plain;charset=utf-8'
+        filename = `mindlog-export-${dateTag}.txt`
+      } else {
+        content = JSON.stringify(exportData, null, 2)
+        mimeType = 'application/json'
+        filename = `mindlog-export-${dateTag}.json`
+      }
+
+      const blob = new Blob([content], { type: mimeType })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `mindlog-export-${new Date().toISOString().split('T')[0]}.json`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch {
-      // 내보내기 실패 시 무시
+      // ignore
     } finally {
       setExportLoading(false)
     }
@@ -135,19 +280,171 @@ export function Settings() {
           </button>
         </form>
 
-        {/* Data export */}
+        {/* 일기 잠금 설정 */}
         <div className="card p-6 space-y-3">
-          <h2 className="text-sm font-semibold text-gray-700">데이터 내보내기</h2>
-          <p className="text-xs text-gray-400 leading-relaxed">
-            내가 기록한 모든 대화와 패턴 분석을 JSON 파일로 다운로드해요. 언제든 내 데이터를
-            가져갈 수 있어요.
-          </p>
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <h2 className="text-sm font-semibold text-gray-700">일기 열람 잠금</h2>
+              <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
+                켜두면 각 일기에 비밀번호를 설정할 수 있어요. 잠금된 일기는 비밀번호를 입력해야만 볼 수 있어요.
+              </p>
+            </div>
+            <button
+              onClick={handleToggleLock}
+              disabled={lockToggling}
+              className={clsx(
+                'ml-4 relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none',
+                lockEnabled ? 'bg-primary-500' : 'bg-gray-200',
+                lockToggling && 'opacity-60 cursor-not-allowed'
+              )}
+              role="switch"
+              aria-checked={lockEnabled}
+            >
+              <span
+                className={clsx(
+                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200',
+                  lockEnabled ? 'translate-x-5' : 'translate-x-0'
+                )}
+              />
+            </button>
+          </div>
+          {lockEnabled && (
+            <motion.p
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-xs text-primary-600 bg-primary-50 rounded-lg px-3 py-2"
+            >
+              🔒 잠금 기능이 켜졌어요. 일기 열람 화면에서 날짜별로 잠금을 설정할 수 있어요.
+            </motion.p>
+          )}
+        </div>
+
+        {/* Data export */}
+        <div className="card p-6 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700">데이터 내보내기</h2>
+            <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+              내가 기록한 대화와 패턴 분석을 원하는 형식으로 다운로드해요.
+            </p>
+          </div>
+
+          {/* Format selector */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-gray-500">형식</p>
+            <div className="grid grid-cols-4 gap-2">
+              {FORMAT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => opt.ready && setExportFormat(opt.value)}
+                  disabled={!opt.ready}
+                  title={!opt.ready ? '준비 중이에요' : undefined}
+                  className={clsx(
+                    'relative py-2.5 rounded-xl text-sm font-medium border-2 transition-all',
+                    !opt.ready
+                      ? 'border-transparent bg-gray-50 text-gray-300 cursor-not-allowed'
+                      : exportFormat === opt.value
+                      ? 'border-primary-400 bg-primary-50 text-primary-600'
+                      : 'border-transparent bg-gray-50 text-gray-500 hover:border-gray-200',
+                  )}
+                >
+                  {opt.label}
+                  {!opt.ready && (
+                    <span className="absolute -top-1.5 -right-1 text-[9px] bg-gray-200 text-gray-400 rounded px-1 leading-tight">
+                      예정
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {exportFormat === 'pdf' && (
+              <p className="text-xs text-gray-400">
+                브라우저 인쇄 창이 열려요. "PDF로 저장"을 선택하세요.
+              </p>
+            )}
+          </div>
+
+          {/* Range selector */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-gray-500">기간</p>
+            <div className="flex gap-2">
+              {[
+                { value: 'all' as ExportRange, label: '전체' },
+                { value: 'dateRange' as ExportRange, label: '날짜 지정' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setExportRange(opt.value)}
+                  className={clsx(
+                    'px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all',
+                    exportRange === opt.value
+                      ? 'border-primary-400 bg-primary-50 text-primary-600'
+                      : 'border-transparent bg-gray-50 text-gray-500 hover:border-gray-200',
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Date range picker */}
+          <AnimatePresence>
+            {exportRange === 'dateRange' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 space-y-1">
+                      <p className="text-xs text-gray-400">시작일</p>
+                      <input
+                        type="date"
+                        value={startDate}
+                        max={endDate || undefined}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="input-field text-sm"
+                      />
+                    </div>
+                    <span className="text-gray-300 mt-5">~</span>
+                    <div className="flex-1 space-y-1">
+                      <p className="text-xs text-gray-400">종료일</p>
+                      <input
+                        type="date"
+                        value={endDate}
+                        min={startDate || undefined}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="input-field text-sm"
+                      />
+                    </div>
+                  </div>
+                  {startDate && endDate && startDate > endDate && (
+                    <p className="text-xs text-red-500">시작일이 종료일보다 늦을 수 없어요.</p>
+                  )}
+                  {startDate && endDate && startDate <= endDate && (
+                    <p className="text-xs text-gray-400">
+                      {format(parseISO(startDate), 'yyyy년 M월 d일', { locale: ko })} ~{' '}
+                      {format(parseISO(endDate), 'yyyy년 M월 d일', { locale: ko })} 기록만
+                      포함돼요.
+                    </p>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <button
             onClick={handleExport}
-            disabled={exportLoading}
-            className="btn-secondary w-full text-sm"
+            disabled={exportLoading || exportFormat === 'hwp' || !dateRangeValid}
+            className="btn-secondary w-full text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {exportLoading ? '준비 중...' : '📦 내 데이터 다운로드'}
+            {exportLoading
+              ? '준비 중...'
+              : exportFormat === 'pdf'
+              ? '🖨️ 인쇄 창 열기'
+              : `📦 ${FORMAT_OPTIONS.find((f) => f.value === exportFormat)?.label ?? ''} 파일 다운로드`}
           </button>
         </div>
 

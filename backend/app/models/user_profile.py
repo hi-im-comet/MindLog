@@ -18,6 +18,7 @@ class UserProfile(db.Model):
     total_entries = db.Column(db.Integer, default=0)
     consecutive_days = db.Column(db.Integer, default=0)
     last_entry_date = db.Column(db.Date, nullable=True)
+    entry_lock_enabled = db.Column(db.Boolean, default=False)
     last_analysis_at = db.Column(db.DateTime(timezone=True), nullable=True)
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                             onupdate=lambda: datetime.now(timezone.utc))
@@ -35,6 +36,7 @@ class UserProfile(db.Model):
             'ai_name': self.ai_name,
             'total_entries': self.total_entries,
             'consecutive_days': self.consecutive_days or 0,
+            'entry_lock_enabled': self.entry_lock_enabled or False,
             'last_analysis_at': self.last_analysis_at.isoformat() if self.last_analysis_at else None,
         }
 
