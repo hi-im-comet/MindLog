@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { clsx } from 'clsx'
 import { Layout } from '@/components/shared/Layout'
@@ -96,6 +96,14 @@ export function Dashboard() {
   const today = format(new Date(), 'yyyy-MM-dd')
   const todayLabel = format(new Date(), 'M월 d일', { locale: ko })
 
+  const queryClient = useQueryClient()
+  const todayFavMutation = useMutation({
+    mutationFn: (entryId: string) => entriesApi.toggleFavorite(entryId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entries'] })
+    },
+  })
+
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
     queryKey: ['entries', debouncedQ, showFavoritesOnly],
     queryFn: ({ pageParam = 1 }) => entriesApi.list({
@@ -151,35 +159,45 @@ export function Dashboard() {
             </div>
           </button>
         ) : (
-          <button
-            onClick={() =>
-              navigate(
-                todayEntry.is_draft
-                  ? `/entry/${todayEntry.entry_date}`
-                  : `/view/${todayEntry.id}`,
-              )
-            }
-            className="w-full card p-5 text-left hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-xs font-medium text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
-                오늘
-              </span>
-              {todayEntry.is_draft && (
-                <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full">
-                  임시저장
+          <div className="relative">
+            <button
+              onClick={() => todayFavMutation.mutate(todayEntry.id)}
+              disabled={todayFavMutation.isPending}
+              className="absolute top-3 right-3 z-10 text-base disabled:opacity-50"
+              title={todayEntry.is_favorite ? '즐겨찾기 해제' : '즐겨찾기'}
+            >
+              {todayEntry.is_favorite ? '⭐' : '☆'}
+            </button>
+            <button
+              onClick={() =>
+                navigate(
+                  todayEntry.is_draft
+                    ? `/entry/${todayEntry.entry_date}`
+                    : `/view/${todayEntry.id}`,
+                )
+              }
+              className="w-full card p-5 text-left hover:shadow-md transition-shadow pr-12"
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-xs font-medium text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
+                  오늘
                 </span>
-              )}
-              {todayEntry.is_locked && (
-                <span className="text-xs text-gray-400" title="잠긴 일기">🔒</span>
-              )}
-            </div>
-            <p className="text-sm text-gray-600 line-clamp-2">
-              {todayEntry.is_locked
-                ? '비밀번호로 보호된 일기예요'
-                : todayEntry.daily_summary || todayEntry.raw_content}
-            </p>
-          </button>
+                {todayEntry.is_draft && (
+                  <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full">
+                    임시저장
+                  </span>
+                )}
+                {todayEntry.is_locked && (
+                  <span className="text-xs text-gray-400" title="잠긴 일기">🔒</span>
+                )}
+              </div>
+              <p className="text-sm text-gray-600 line-clamp-2">
+                {todayEntry.is_locked
+                  ? '비밀번호로 보호된 일기예요'
+                  : todayEntry.daily_summary || todayEntry.raw_content}
+              </p>
+            </button>
+          </div>
         )}
 
         {/* Calendar */}
