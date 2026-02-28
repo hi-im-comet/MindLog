@@ -27,6 +27,10 @@ export function EntryEditor() {
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [isInitializing, setIsInitializing] = useState(true)
 
+  // 즐겨찾기
+  const [isFavorite, setIsFavorite] = useState(false)
+  const [favPending, setFavPending] = useState(false)
+
   // 채팅 UI 상태
   const [inputValue, setInputValue] = useState('')
   const [isSending, setIsSending] = useState(false)
@@ -66,6 +70,7 @@ export function EntryEditor() {
           if (existing.raw_content?.trim()) {
             userMessagesRef.current = existing.raw_content.split('\n\n').filter(Boolean)
           }
+          setIsFavorite(existing.is_favorite ?? false)
         } else {
           const created = await entriesApi.create({
             entry_date: entryDate,
@@ -183,6 +188,19 @@ export function EntryEditor() {
     navigate(`/view/${entryId}`)
   }
 
+  const handleFavToggle = async () => {
+    if (!entryId || favPending) return
+    setFavPending(true)
+    try {
+      const updated = await entriesApi.toggleFavorite(entryId)
+      setIsFavorite(updated.is_favorite)
+    } catch {
+      // 실패 시 상태 유지
+    } finally {
+      setFavPending(false)
+    }
+  }
+
   const userMessageCount = messages.filter((m) => m.role === 'user').length
 
   if (isInitializing) {
@@ -204,18 +222,30 @@ export function EntryEditor() {
             <h2 className="text-base font-bold text-gray-800">{dateLabel}</h2>
             <p className="text-xs text-gray-400 mt-0.5">오늘 하루를 자유롭게 이야기해보세요</p>
           </div>
-          <button
-            onClick={handleFinish}
-            disabled={userMessageCount === 0}
-            className={clsx(
-              'text-sm font-medium px-4 py-2 rounded-lg transition-colors',
-              userMessageCount > 0
-                ? 'bg-primary-500 text-white hover:bg-primary-600'
-                : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+          <div className="flex items-center gap-2">
+            {entryId && (
+              <button
+                onClick={handleFavToggle}
+                disabled={favPending}
+                className="text-lg p-1 transition-colors disabled:opacity-50"
+                title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
+              >
+                {isFavorite ? '⭐' : '☆'}
+              </button>
             )}
-          >
-            기록 마치기
-          </button>
+            <button
+              onClick={handleFinish}
+              disabled={userMessageCount === 0}
+              className={clsx(
+                'text-sm font-medium px-4 py-2 rounded-lg transition-colors',
+                userMessageCount > 0
+                  ? 'bg-primary-500 text-white hover:bg-primary-600'
+                  : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+              )}
+            >
+              기록 마치기
+            </button>
+          </div>
         </div>
 
         {/* Crisis banner */}

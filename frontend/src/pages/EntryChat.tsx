@@ -42,6 +42,14 @@ export function EntryChat() {
     },
   })
 
+  const favMutation = useMutation({
+    mutationFn: () => entriesApi.toggleFavorite(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entry', id] })
+      queryClient.invalidateQueries({ queryKey: ['entries'] })
+    },
+  })
+
   if (entryLoading || convLoading) {
     return (
       <Layout>
@@ -92,6 +100,15 @@ export function EntryChat() {
           <div className="flex-1 min-w-0">
             <h2 className="text-base font-bold text-gray-800 truncate">{dateLabel} 대화</h2>
           </div>
+          {/* 즐겨찾기 */}
+          <button
+            onClick={() => favMutation.mutate()}
+            disabled={favMutation.isPending}
+            className="text-lg p-1 transition-colors disabled:opacity-50"
+            title={entry.is_favorite ? '즐겨찾기 해제' : '즐겨찾기'}
+          >
+            {entry.is_favorite ? '⭐' : '☆'}
+          </button>
           {/* Delete control */}
           {!confirmDelete ? (
             <button
