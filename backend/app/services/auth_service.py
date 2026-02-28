@@ -29,9 +29,14 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode('utf-8')).hexdigest()
 
 
-def create_user_with_profile(email: str, display_name: str,
-                              password: str = None, google_id: str = None,
-                              avatar_url: str = None) -> User:
+def create_user_with_profile(
+    email: str,
+    display_name: str,
+    password: str = None,
+    google_id: str = None,
+    avatar_url: str = None,
+    ai_nickname: str = None,
+) -> User:
     """Create a new user with an empty profile. Does not commit."""
     user = User(
         email=email,
@@ -41,9 +46,9 @@ def create_user_with_profile(email: str, display_name: str,
         avatar_url=avatar_url,
     )
     db.session.add(user)
-    db.session.flush()  # get user.id before commit
+    db.session.flush()
 
-    profile = UserProfile(user_id=user.id)
+    profile = UserProfile(user_id=user.id, ai_name=ai_nickname)
     db.session.add(profile)
 
     return user

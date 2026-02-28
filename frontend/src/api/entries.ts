@@ -56,18 +56,13 @@ export const entriesApi = {
     return entriesApi.create(draftData)
   },
 
-  lockEntry: async (id: string, password: string): Promise<JournalEntry> => {
-    const res = await apiClient.post<ApiResponse<{ entry: JournalEntry }>>(`/api/entries/${id}/lock`, { password })
+  lockEntry: async (id: string): Promise<JournalEntry> => {
+    const res = await apiClient.post<ApiResponse<{ entry: JournalEntry }>>(`/api/entries/${id}/lock`)
     return res.data.data!.entry
   },
 
-  unlockEntry: async (id: string, password: string): Promise<JournalEntry> => {
-    const res = await apiClient.post<ApiResponse<{ entry: JournalEntry }>>(`/api/entries/${id}/unlock`, { password })
+  unlockEntry: async (id: string): Promise<JournalEntry> => {
+    const res = await apiClient.post<ApiResponse<{ entry: JournalEntry }>>(`/api/entries/${id}/unlock`)
     return res.data.data!.entry
-  },
-
-  verifyLock: async (id: string, password: string): Promise<boolean> => {
-    const res = await apiClient.post<ApiResponse<{ verified: boolean }>>(`/api/entries/${id}/verify-lock`, { password })
-    return res.data.data!.verified
   },
 }

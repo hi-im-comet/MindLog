@@ -5,7 +5,7 @@ from flask_jwt_extended import (
 )
 from marshmallow import ValidationError
 
-from app.extensions import db, limiter
+from app.extensions import db
 from app.models.user import User
 from app.models.user_profile import UserProfile
 from app.api.auth.schemas import RegisterSchema, LoginSchema, GoogleAuthSchema, RefreshSchema
@@ -21,20 +21,28 @@ refresh_schema = RefreshSchema()
 
 
 @auth_bp.route('/register', methods=['POST'])
-@limiter.limit('10 per hour')
 def register():
+    body = request.get_json()
+    if not body:
+        return api_error('요청 본문이 비어 있습니다.', 400)
     try:
-        data = register_schema.load(request.get_json() or {})
+        data = register_schema.load(body)
     except ValidationError as e:
-        return api_error('입력값을 확인해주세요.', 422, e.messages)
+        msg = e.messages
+        if isinstance(msg, dict):
+            first = next((v[0] if isinstance(v, list) else v for v in msg.values() if v), '입력값을 확인해주세요.')
+        else:
+            first = msg if isinstance(msg, str) else '입력값을 확인해주세요.'
+        return api_error(first, 400, e.messages if isinstance(msg, dict) else None)
 
     if User.query.filter_by(email=data['email']).first():
         return api_error('이미 사용 중인 이메일입니다.', 409)
 
     user = auth_service.create_user_with_profile(
         email=data['email'],
-        display_name=data['display_name'],
+        display_name=data['userNickname'],
         password=data['password'],
+        ai_nickname=data['aiNickname'],
     )
     auth_service.seed_default_categories(user.id)
 
@@ -57,7 +65,6 @@ def register():
 
 
 @auth_bp.route('/login', methods=['POST'])
-@limiter.limit('20 per hour')
 def login():
     try:
         data = login_schema.load(request.get_json() or {})
@@ -92,7 +99,6 @@ def login():
 
 
 @auth_bp.route('/google', methods=['POST'])
-@limiter.limit('20 per hour')
 def google_auth():
     try:
         data = google_schema.load(request.get_json() or {})

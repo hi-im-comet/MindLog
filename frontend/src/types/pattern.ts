@@ -1,11 +1,15 @@
 export interface PatternLog {
   id: string
-  log_type: 'weekly' | 'monthly' | 'milestone'
+  log_type: 'weekly' | 'monthly' | 'semiannual'
   period_start: string
   period_end: string
   headline: string
-  body: string
+  body: string                      // 구버전 호환; 새 로그는 mirror와 동일
+  mirror: string | null             // 거울: 판단 없는 관찰
+  data_badges: string[]             // 구체적 데이터 포인트
+  small_experiment: string | null   // 이번 기간 해볼 작은 실험
   patterns_found: string[]
+  safety_content: string | null     // 위기 언어 감지 시에만
   entries_analyzed: number | null
   is_edited: boolean
   generated_at: string

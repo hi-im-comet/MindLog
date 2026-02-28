@@ -4,9 +4,10 @@ import { ApiResponse } from '@/types/api'
 
 export const authApi = {
   register: async (data: {
+    userNickname: string
+    aiNickname: string
     email: string
     password: string
-    display_name: string
   }): Promise<AuthResponse> => {
     const res = await apiClient.post<ApiResponse<AuthResponse>>('/api/auth/register', data)
     return res.data.data!

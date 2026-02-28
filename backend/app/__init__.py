@@ -12,13 +12,23 @@ def create_app(config_name='development'):
     migrate.init_app(app, db)
     jwt.init_app(app)
     limiter.init_app(app)
+    _cors_origins = [app.config['FRONTEND_URL']]
+    if config_name == 'development':
+        # Vite proxy 또는 직접 호출 시 localhost / 127.0.0.1 둘 다 허용
+        _origin = app.config['FRONTEND_URL']
+        if 'localhost' in _origin:
+            _cors_origins.append(_origin.replace('localhost', '127.0.0.1'))
+        elif '127.0.0.1' in _origin:
+            _cors_origins.append(_origin.replace('127.0.0.1', 'localhost'))
+    _cors_opts = {
+        "origins": _cors_origins,
+        "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True,
+    }
     cors.init_app(app, resources={
-        r"/api/*": {
-            "origins": [app.config['FRONTEND_URL']],
-            "methods": ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"],
-            "supports_credentials": True,
-        }
+        r"/api/*": _cors_opts,
+        r"/health": _cors_opts,
     })
 
     # Import models so Flask-Migrate can detect them

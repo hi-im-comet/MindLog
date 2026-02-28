@@ -7,7 +7,7 @@ import type { PatternLog } from '@/types/pattern'
 const TYPE_LABEL: Record<string, string> = {
   weekly: '주간',
   monthly: '월간',
-  milestone: '마일스톤',
+  semiannual: '6개월',
 }
 
 interface Props {
@@ -20,10 +20,14 @@ interface Props {
 export function PatternCard({ pattern, defaultExpanded = false, onUpdate, onDelete }: Props) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [editing, setEditing] = useState(false)
-  const [editBody, setEditBody] = useState(pattern.body)
+  const [editBody, setEditBody] = useState(pattern.mirror ?? pattern.body)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [safetyOpen, setSafetyOpen] = useState(false)
 
   const periodLabel = `${format(parseISO(pattern.period_start), 'M/d', { locale: ko })} ~ ${format(parseISO(pattern.period_end), 'M/d')}`
+
+  // 표시할 본문: mirror 우선, 없으면 body(구버전)
+  const displayBody = pattern.mirror ?? pattern.body
 
   const handleSave = () => {
     if (editBody.trim() && onUpdate) {
@@ -33,7 +37,7 @@ export function PatternCard({ pattern, defaultExpanded = false, onUpdate, onDele
   }
 
   const handleCancel = () => {
-    setEditBody(pattern.body)
+    setEditBody(pattern.mirror ?? pattern.body)
     setEditing(false)
   }
 
@@ -45,14 +49,14 @@ export function PatternCard({ pattern, defaultExpanded = false, onUpdate, onDele
           onClick={() => setExpanded((v) => !v)}
           className="text-left flex-1"
         >
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-medium text-primary-500 bg-primary-50 px-2 py-0.5 rounded-full">
                 {TYPE_LABEL[pattern.log_type] ?? pattern.log_type}
               </span>
               <span className="text-xs text-gray-400">{periodLabel}</span>
-              {pattern.entries_analyzed && (
-                <span className="text-xs text-gray-300">{pattern.entries_analyzed}개 대화</span>
+              {pattern.entries_analyzed != null && (
+                <span className="text-xs text-gray-300">{pattern.entries_analyzed}개 일기</span>
               )}
               {pattern.is_edited && (
                 <span className="text-xs text-amber-500 bg-amber-50 px-2 py-0.5 rounded-full">수정됨</span>
@@ -117,14 +121,16 @@ export function PatternCard({ pattern, defaultExpanded = false, onUpdate, onDele
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="space-y-3 pt-1 border-t border-gray-50">
-              {/* Body — view or edit mode */}
+            <div className="space-y-4 pt-2 border-t border-gray-50">
+
+              {/* 거울 — view or edit mode */}
               {editing ? (
                 <div className="space-y-2">
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">거울 (수정 가능)</p>
                   <textarea
                     value={editBody}
                     onChange={(e) => setEditBody(e.target.value)}
-                    rows={6}
+                    rows={5}
                     className="w-full text-sm text-gray-700 border border-primary-200 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-primary-100 leading-relaxed"
                     autoFocus
                   />
@@ -144,15 +150,35 @@ export function PatternCard({ pattern, defaultExpanded = false, onUpdate, onDele
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
-                  {pattern.body}
-                </p>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">거울</p>
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                    {displayBody}
+                  </p>
+                </div>
               )}
 
-              {/* Patterns found */}
+              {/* 데이터 배지 */}
+              {pattern.data_badges.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">근거</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {pattern.data_badges.map((badge, i) => (
+                      <span
+                        key={i}
+                        className="text-xs bg-blue-50 text-blue-600 px-2.5 py-1 rounded-full border border-blue-100"
+                      >
+                        {badge}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 발견된 패턴 */}
               {pattern.patterns_found.length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">발견된 패턴</p>
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">반복 패턴</p>
                   <div className="flex flex-wrap gap-1.5">
                     {pattern.patterns_found.map((p, i) => (
                       <span key={i} className="text-xs bg-gray-50 text-gray-600 px-2.5 py-1 rounded-full border border-gray-100">
@@ -160,6 +186,35 @@ export function PatternCard({ pattern, defaultExpanded = false, onUpdate, onDele
                       </span>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* 작은 실험 */}
+              {pattern.small_experiment && (
+                <div className="bg-primary-50 rounded-xl px-4 py-3 space-y-0.5">
+                  <p className="text-xs font-medium text-primary-500 uppercase tracking-wide">작은 실험</p>
+                  <p className="text-sm text-primary-700 leading-relaxed">{pattern.small_experiment}</p>
+                </div>
+              )}
+
+              {/* 안전 블록 — 위기 언어 감지 시에만 */}
+              {pattern.safety_content && (
+                <div className="border border-orange-200 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setSafetyOpen((v) => !v)}
+                    className="w-full flex items-center justify-between px-4 py-2.5 bg-orange-50 text-left"
+                  >
+                    <span className="text-xs font-medium text-orange-600">⚠️ 주의가 필요한 내용이 감지됐어요</span>
+                    <span className="text-orange-400 text-xs">{safetyOpen ? '접기' : '펼치기'}</span>
+                  </button>
+                  {safetyOpen && (
+                    <div className="px-4 py-3 bg-white space-y-2">
+                      <p className="text-sm text-gray-700 leading-relaxed">{pattern.safety_content}</p>
+                      <p className="text-xs text-gray-400">
+                        힘드실 때 자살예방상담전화 <strong>1393</strong> (24시간)에 연락해보세요.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

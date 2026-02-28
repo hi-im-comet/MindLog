@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, getApiBaseUrl } from './client'
 import type { Conversation, ResponseMode, SSEEvent } from '@/types/conversation'
 
 export const conversationsApi = {
@@ -61,7 +61,9 @@ export const conversationsApi = {
       }
     }
 
-    const response = await fetch(`/api/conversations/${convId}/messages`, {
+    const base = getApiBaseUrl()
+    const url = base ? `${base}/api/conversations/${convId}/messages` : `/api/conversations/${convId}/messages`
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

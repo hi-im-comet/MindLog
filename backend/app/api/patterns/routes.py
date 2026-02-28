@@ -82,19 +82,19 @@ def delete_pattern_log(log_id):
 @patterns_bp.route('/generate', methods=['POST'])
 @jwt_required()
 def generate_pattern():
-    """수동 패턴 분석 트리거."""
+    """수동 패턴 분석 트리거. period_type: 'weekly' | 'monthly' | 'semiannual'"""
     user_id = get_jwt_identity()
-    period_days = request.get_json(silent=True, force=True) or {}
-    period_days = int(period_days.get('period_days', 7))
-    if period_days not in (7, 30):
-        period_days = 7
+    body = request.get_json(silent=True, force=True) or {}
+    period_type = body.get('period_type', 'weekly')
+    if period_type not in ('weekly', 'monthly', 'semiannual'):
+        period_type = 'weekly'
 
     try:
         from app.services.pattern_analyzer import analyze_patterns
-        log = analyze_patterns(user_id, period_days=period_days)
+        log = analyze_patterns(user_id, period_type=period_type)
         if log:
             return api_response({'pattern': log.to_dict()}, status=201)
-        return api_error('"기록 마치기"를 한 대화가 아직 없어요. 대화를 마무리한 뒤 다시 시도해보세요.', 400)
+        return api_error('이 기간에 마무리한 일기가 없어요. 일기를 작성한 뒤 다시 시도해보세요.', 400)
     except Exception as e:
         logger.error(f'패턴 분석 실패: {e}')
         return api_error('분석 중 오류가 발생했습니다.', 500)

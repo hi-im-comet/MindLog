@@ -1,6 +1,6 @@
 """
 패턴 분석 서비스.
-사용자의 최근 일기들을 분석해 반복 패턴과 변화 로그를 생성한다.
+사용자의 일기들을 분석해 '거울 → 근거 → 작은 행동' 구조의 변화로그를 생성한다.
 """
 from __future__ import annotations
 import json
@@ -16,53 +16,128 @@ from app.services.ai_service import call_claude, MODEL_SONNET
 
 logger = logging.getLogger(__name__)
 
-PATTERN_ANALYSIS_SYSTEM = """\
-당신은 정신건강 일기 패턴 분석 전문가입니다.
-사용자의 최근 일기들을 분석해 반복 패턴과 변화를 따뜻하고 솔직하게 전달합니다.
+# ──────────────────────────────────────────
+# AI 프롬프트: 기간별로 다른 깊이
+# ──────────────────────────────────────────
 
-반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 절대 출력하지 마세요.
-{
-  "headline": "이 기간을 한 문장으로 (30자 이내, 따뜻한 관찰자 시점)",
-  "body": "3~5개 문단의 상세 분석. 각 문단 사이 빈 줄 포함.",
-  "patterns_found": ["발견된 패턴 최대 5가지 (명사형으로 짧게)"]
-}
+_COMMON_NOTE = """\
 
-분석 관점:
-- 감정 패턴: 기분 추이, 반복되는 감정 상태
-- 스트레스 트리거: 반복 언급된 상황·사람·장소
-- 긍정 변화: 잘 해낸 것, 성장 징후, 작은 승리
-- 생활 패턴: 수면·식사·운동이 언급된 경우 연관성
-- 인지 패턴: 반복되는 사고방식이 있다면 중립적으로 관찰
-
-원칙: 판단하지 말고 관찰하세요. 따뜻하되 공허한 긍정은 하지 마세요.
+공통 원칙:
+- 상담·치료 어투 금지. 따뜻한 거울이 되세요.
+- 판단하지 말고 관찰하세요. 공허한 격려 없이.
+- safety_content는 자해·자살 언급이 실제로 있을 때만. 없으면 반드시 null.
+- 반드시 JSON만 출력. 다른 텍스트 절대 금지.
 """
 
+WEEKLY_SYSTEM = """\
+당신은 따뜻한 거울입니다. 사용자의 최근 7일 일기를 읽고 이번 주를 간결하게 담아냅니다.
 
-def analyze_patterns(user_id: str, period_days: int = 7) -> Optional[PatternLog]:
-    """
-    최근 period_days일의 대화 기록을 분석해 PatternLog를 생성·저장한다.
-    기록이 없으면 최대 30일까지 범위를 확장한다.
-    """
+반드시 아래 JSON 형식으로만 응답하세요:
+{
+  "headline": "이번 주를 한 문장으로 (25자 이내)",
+  "mirror": "거울: 이번 주 당신은 어떤 상태였나요? (2~3문장, 판단 없는 관찰)",
+  "data_badges": ["구체적 데이터 최대 3개 — 예: '월·수 기분 최고', '목요일 스트레스 급등'"],
+  "small_experiment": "이번 주 해볼 아주 작은 실험 1개 (1문장, 바로 실행 가능한 것)",
+  "patterns_found": ["발견된 패턴 최대 3가지 (명사형으로 짧게)"],
+  "safety_content": null
+}
+""" + _COMMON_NOTE
+
+MONTHLY_SYSTEM = """\
+당신은 따뜻한 거울입니다. 사용자의 최근 30일 일기를 읽고 이번 달의 흐름과 패턴을 담아냅니다.
+
+반드시 아래 JSON 형식으로만 응답하세요:
+{
+  "headline": "이번 달을 한 문장으로 (25자 이내)",
+  "mirror": "거울: 이번 달 어떤 패턴이 반복됐나요? 어떤 변화가 있었나요? (3~4문장, 판단 없는 관찰)",
+  "data_badges": ["구체적 데이터 최대 4개 — 예: '평균 기분 7.2', '스트레스 피크 3회', '수면 언급 5회'"],
+  "small_experiment": "다음 달 초 해볼 작은 실험 1개 (1~2문장)",
+  "patterns_found": ["발견된 패턴 최대 4가지 (명사형으로 짧게)"],
+  "safety_content": null
+}
+""" + _COMMON_NOTE
+
+SEMIANNUAL_SYSTEM = """\
+당신은 따뜻한 거울입니다. 사용자의 최근 6개월 일기를 읽고 심층 패턴과 변화 흐름을 담아냅니다.
+
+반드시 아래 JSON 형식으로만 응답하세요:
+{
+  "headline": "이 6개월을 한 문장으로 (30자 이내)",
+  "mirror": "거울: 이 6개월 동안 어떤 패턴의 삶을 살았나요? 어떤 변화가 있었나요? 트리거→생각→감정→행동 흐름이 보이면 담아주세요. (4~5문장, 판단 없는 관찰)",
+  "data_badges": ["구체적 데이터 최대 5개 — 예: '상반기 평균 기분 6.1 → 하반기 7.4', '주요 트리거 3종 반복'"],
+  "small_experiment": "지금 당장 시작할 작은 실험 1개 (2문장 이내)",
+  "patterns_found": ["발견된 패턴 최대 5가지 (명사형으로 짧게)"],
+  "safety_content": null
+}
+""" + _COMMON_NOTE
+
+_PROMPT_MAP = {
+    'weekly': WEEKLY_SYSTEM,
+    'monthly': MONTHLY_SYSTEM,
+    'semiannual': SEMIANNUAL_SYSTEM,
+}
+
+_MAX_TOKENS_MAP = {
+    'weekly': 1024,
+    'monthly': 1536,
+    'semiannual': 2048,
+}
+
+
+# ──────────────────────────────────────────
+# 기간 계산
+# ──────────────────────────────────────────
+
+def get_period_dates(period_type: str) -> tuple[date, date]:
+    """기간 타입에 따라 결정론적인 (period_start, period_end) 반환."""
     today = date.today()
+    if period_type == 'weekly':
+        # 이번 주 월요일 ~ 오늘
+        period_start = today - timedelta(days=today.weekday())
+        return period_start, today
+    elif period_type == 'monthly':
+        # 이번 달 1일 ~ 오늘
+        return today.replace(day=1), today
+    elif period_type == 'semiannual':
+        # 6개월 전 1일 ~ 오늘
+        month = today.month - 6
+        year = today.year
+        if month <= 0:
+            month += 12
+            year -= 1
+        return today.replace(year=year, month=month, day=1), today
+    else:
+        raise ValueError(f'알 수 없는 period_type: {period_type}')
 
-    # 지정 기간에 기록이 없으면 30일까지 확장
-    for days in sorted({period_days, 30}):
-        period_start = today - timedelta(days=days - 1)
-        entries = (
-            JournalEntry.query
-            .filter_by(user_id=user_id, is_draft=False)
-            .filter(JournalEntry.deleted_at.is_(None))
-            .filter(JournalEntry.entry_date >= period_start)
-            .filter(JournalEntry.entry_date <= today)
-            .order_by(JournalEntry.entry_date)
-            .all()
-        )
-        if entries:
-            period_days = days
-            break
+
+# ──────────────────────────────────────────
+# 메인 분석 함수
+# ──────────────────────────────────────────
+
+def analyze_patterns(user_id: str, period_type: str = 'weekly') -> Optional[PatternLog]:
+    """
+    period_type에 해당하는 기간의 일기를 분석해 PatternLog를 생성·저장한다.
+    같은 기간 로그가 이미 존재하면 upsert(UPDATE)한다.
+    """
+    if period_type not in _PROMPT_MAP:
+        logger.warning(f'알 수 없는 period_type: {period_type}')
+        return None
+
+    period_start, period_end = get_period_dates(period_type)
+
+    # 해당 기간 일기 조회
+    entries = (
+        JournalEntry.query
+        .filter_by(user_id=user_id, is_draft=False)
+        .filter(JournalEntry.deleted_at.is_(None))
+        .filter(JournalEntry.entry_date >= period_start)
+        .filter(JournalEntry.entry_date <= period_end)
+        .order_by(JournalEntry.entry_date)
+        .all()
+    )
 
     if not entries:
-        logger.info(f'패턴 분석 스킵 (기록 없음): user_id={user_id}')
+        logger.info(f'패턴 분석 스킵 (기록 없음): user_id={user_id}, period_type={period_type}')
         return None
 
     # 분석 컨텍스트 구성
@@ -75,19 +150,19 @@ def analyze_patterns(user_id: str, period_days: int = 7) -> Optional[PatternLog]
             header += f' 에너지:{e.energy_score}/10'
         if e.daily_summary:
             header += f' | 요약: {e.daily_summary}'
-        body = e.raw_content[:400] + ('...' if len(e.raw_content) > 400 else '')
+        body = e.raw_content[:500] + ('...' if len(e.raw_content) > 500 else '')
         context_parts.append(f'{header}\n{body}')
 
     user_message = (
-        f'분석 기간: {period_start} ~ {today} ({len(entries)}개 일기)\n\n'
+        f'분석 기간: {period_start} ~ {period_end} ({len(entries)}개 일기)\n\n'
         + '\n\n---\n\n'.join(context_parts)
     )
 
     text, _usage = call_claude(
         messages=[{'role': 'user', 'content': user_message}],
-        system_prompt=PATTERN_ANALYSIS_SYSTEM,
+        system_prompt=_PROMPT_MAP[period_type],
         model=MODEL_SONNET,
-        max_tokens=2048,
+        max_tokens=_MAX_TOKENS_MAP[period_type],
     )
 
     try:
@@ -96,15 +171,50 @@ def analyze_patterns(user_id: str, period_days: int = 7) -> Optional[PatternLog]
         logger.warning(f'패턴 분석 JSON 파싱 실패: {text[:200]}')
         return None
 
-    log_type = 'weekly' if period_days <= 7 else 'monthly'
+    mirror = data.get('mirror') or ''
+    headline = data.get('headline') or '이번 기간 분석'
+    data_badges = data.get('data_badges') or []
+    small_experiment = data.get('small_experiment') or None
+    patterns_found = data.get('patterns_found') or []
+    safety_content = data.get('safety_content') or None  # null → None
+
+    # Upsert: 동일 기간 로그가 있으면 UPDATE
+    existing = (
+        PatternLog.query
+        .filter_by(user_id=user_id, log_type=period_type, period_start=period_start)
+        .first()
+    )
+
+    if existing:
+        existing.period_end = period_end
+        existing.headline = headline
+        existing.body = mirror
+        existing.mirror = mirror
+        existing.data_badges = data_badges
+        existing.small_experiment = small_experiment
+        existing.patterns_found = patterns_found
+        existing.safety_content = safety_content
+        existing.entries_analyzed = len(entries)
+        existing.model_used = MODEL_SONNET
+        existing.is_edited = False
+        from datetime import timezone
+        from datetime import datetime
+        existing.generated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        return existing
+
     pattern_log = PatternLog(
         user_id=user_id,
-        log_type=log_type,
+        log_type=period_type,
         period_start=period_start,
-        period_end=today,
-        headline=data.get('headline', '이번 기간 분석'),
-        body=data.get('body', ''),
-        patterns_found=data.get('patterns_found', []),
+        period_end=period_end,
+        headline=headline,
+        body=mirror,
+        mirror=mirror,
+        data_badges=data_badges,
+        small_experiment=small_experiment,
+        patterns_found=patterns_found,
+        safety_content=safety_content,
         entries_analyzed=len(entries),
         model_used=MODEL_SONNET,
     )

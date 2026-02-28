@@ -8,7 +8,9 @@ from datetime import date, datetime, timezone
 from app.extensions import db
 from app.models.journal_entry import JournalEntry
 from app.models.journal_category import JournalCategory
+from app.models.user_profile import UserProfile
 from app.utils.helpers import api_response, api_error
+from app.utils.timezone_utils import today_kst, recompute_streak_from_entries
 
 entries_bp = Blueprint('entries', __name__, url_prefix='/api/entries')
 logger = logging.getLogger(__name__)
@@ -70,22 +72,15 @@ def _trigger_ai_tasks(entry_id: str, user_id: str, is_draft: bool) -> None:
     from datetime import date as _date
 
     # 1. total_entries 카운터 + 연속 기록(streak) 업데이트
+    # streak: KST 오늘 포함, 실제 기록(일기) 날짜만으로 재계산. 오늘부터 과거로 연속된 일수.
     from datetime import timedelta
     profile = UserProfile.query.filter_by(user_id=user_id).first()
     if profile:
         profile.total_entries += 1
-        # 연속 기록 계산
-        entry_obj = JournalEntry.query.get(entry_id)
-        if entry_obj:
-            e_date = entry_obj.entry_date
-            last = profile.last_entry_date
-            if last is None or e_date > last:
-                if last is None or (e_date - last).days > 1:
-                    profile.consecutive_days = 1
-                elif (e_date - last).days == 1:
-                    profile.consecutive_days = (profile.consecutive_days or 0) + 1
-                profile.last_entry_date = e_date
         try:
+            consecutive_days, last_entry_date = recompute_streak_from_entries(user_id, db.session)
+            profile.consecutive_days = consecutive_days
+            profile.last_entry_date = last_entry_date
             db.session.commit()
         except Exception as e:
             logger.warning(f'total_entries/streak 업데이트 실패: {e}')
@@ -263,7 +258,7 @@ def create_entry():
     except ValidationError as e:
         return api_error('입력값을 확인해주세요.', 422, e.messages)
 
-    entry_date = data.get('entry_date') or date.today()
+    entry_date = data.get('entry_date') or today_kst()
 
     # Upsert: one entry per day per user
     existing = JournalEntry.query.filter_by(
@@ -364,19 +359,16 @@ def update_entry(entry_id):
 @entries_bp.route('/<uuid:entry_id>/lock', methods=['POST'])
 @jwt_required()
 def lock_entry(entry_id):
-    """비밀번호로 일기를 잠근다."""
+    """전역 잠금이 활성화된 경우 일기를 잠근다 (비밀번호는 전역으로 관리)."""
     user_id = get_jwt_identity()
+    profile = UserProfile.query.filter_by(user_id=user_id).first()
+    if not profile or not profile.entry_lock_enabled:
+        return api_error('잠금 기능이 활성화되지 않았습니다. 설정에서 먼저 잠금을 설정해 주세요.', 400)
     entry = (JournalEntry.query
              .filter_by(id=entry_id, user_id=user_id)
              .filter(JournalEntry.deleted_at.is_(None))
              .first_or_404())
-    data = request.get_json() or {}
-    password = data.get('password', '').strip()
-    if not password or len(password) < 4:
-        return api_error('비밀번호는 4자 이상이어야 합니다.', 400)
-    from werkzeug.security import generate_password_hash
     entry.is_locked = True
-    entry.lock_password_hash = generate_password_hash(password)
     db.session.commit()
     return api_response({'entry': entry.to_dict()}, message='잠금이 설정되었습니다.')
 
@@ -384,7 +376,7 @@ def lock_entry(entry_id):
 @entries_bp.route('/<uuid:entry_id>/unlock', methods=['POST'])
 @jwt_required()
 def unlock_entry(entry_id):
-    """비밀번호 확인 후 잠금을 영구 해제한다."""
+    """일기 잠금을 해제한다 (비밀번호 검증은 /api/users/me/verify-lock에서 처리)."""
     user_id = get_jwt_identity()
     entry = (JournalEntry.query
              .filter_by(id=entry_id, user_id=user_id)
@@ -392,34 +384,9 @@ def unlock_entry(entry_id):
              .first_or_404())
     if not entry.is_locked:
         return api_error('잠금된 일기가 아닙니다.', 400)
-    data = request.get_json() or {}
-    password = data.get('password', '')
-    from werkzeug.security import check_password_hash
-    if not entry.lock_password_hash or not check_password_hash(entry.lock_password_hash, password):
-        return api_error('비밀번호가 일치하지 않습니다.', 401)
     entry.is_locked = False
-    entry.lock_password_hash = None
     db.session.commit()
     return api_response({'entry': entry.to_dict()}, message='잠금이 해제되었습니다.')
-
-
-@entries_bp.route('/<uuid:entry_id>/verify-lock', methods=['POST'])
-@jwt_required()
-def verify_lock(entry_id):
-    """비밀번호를 검증한다 (잠금 상태는 유지, 열람만 허가)."""
-    user_id = get_jwt_identity()
-    entry = (JournalEntry.query
-             .filter_by(id=entry_id, user_id=user_id)
-             .filter(JournalEntry.deleted_at.is_(None))
-             .first_or_404())
-    if not entry.is_locked:
-        return api_response({'verified': True})
-    data = request.get_json() or {}
-    password = data.get('password', '')
-    from werkzeug.security import check_password_hash
-    if not entry.lock_password_hash or not check_password_hash(entry.lock_password_hash, password):
-        return api_error('비밀번호가 일치하지 않습니다.', 401)
-    return api_response({'verified': True})
 
 
 @entries_bp.route('/<uuid:entry_id>', methods=['DELETE'])

@@ -7,9 +7,9 @@ export const patternsApi = {
     return res.data.data.patterns
   },
 
-  generate: async (periodDays: 7 | 30 = 7): Promise<{ task_id?: string; pattern?: PatternLog }> => {
-    const res = await apiClient.post('/api/patterns/generate', { period_days: periodDays })
-    return res.data.data
+  generate: async (periodType: 'weekly' | 'monthly' | 'semiannual' = 'weekly'): Promise<PatternLog | null> => {
+    const res = await apiClient.post('/api/patterns/generate', { period_type: periodType })
+    return res.data.data.pattern ?? null
   },
 
   insights: async (): Promise<InsightsData> => {

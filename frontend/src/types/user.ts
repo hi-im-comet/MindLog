@@ -8,6 +8,7 @@ export interface UserProfile {
   total_entries: number
   consecutive_days: number
   entry_lock_enabled: boolean
+  has_lock_password: boolean
   last_analysis_at: string | null
 }
 

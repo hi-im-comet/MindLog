@@ -118,19 +118,74 @@ export function Settings() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [exportLoading, setExportLoading] = useState(false)
-  const [lockToggling, setLockToggling] = useState(false)
+
+  // Lock modals: 'setup' | 'disable' | 'change' | null
+  type LockModal = 'setup' | 'disable' | 'change' | null
+  const [lockModal, setLockModal] = useState<LockModal>(null)
+  const [lockCurrentPw, setLockCurrentPw] = useState('')
+  const [lockNewPw, setLockNewPw] = useState('')
+  const [lockNewPwConfirm, setLockNewPwConfirm] = useState('')
+  const [lockError, setLockError] = useState('')
+  const [lockLoading, setLockLoading] = useState(false)
+  const [clearEntriesOnDisable, setClearEntriesOnDisable] = useState(false)
 
   const lockEnabled = user?.profile?.entry_lock_enabled ?? false
+  const hasLockPassword = user?.profile?.has_lock_password ?? false
 
-  const handleToggleLock = async () => {
-    setLockToggling(true)
+  const openLockModal = (modal: LockModal) => {
+    setLockCurrentPw('')
+    setLockNewPw('')
+    setLockNewPwConfirm('')
+    setLockError('')
+    setClearEntriesOnDisable(false)
+    setLockModal(modal)
+  }
+
+  const handleSetupLock = async () => {
+    if (lockNewPw.length < 4) { setLockError('비밀번호는 4자 이상이어야 해요.'); return }
+    if (lockNewPw !== lockNewPwConfirm) { setLockError('비밀번호가 일치하지 않아요.'); return }
+    setLockLoading(true)
+    setLockError('')
     try {
-      const updated = await usersApi.updateMe({ entry_lock_enabled: !lockEnabled })
+      const updated = await usersApi.setupLock(lockNewPw)
       updateUser(updated)
+      setLockModal(null)
     } catch {
-      // ignore
+      setLockError('설정에 실패했어요. 다시 시도해주세요.')
     } finally {
-      setLockToggling(false)
+      setLockLoading(false)
+    }
+  }
+
+  const handleDisableLock = async () => {
+    if (!lockCurrentPw) { setLockError('현재 비밀번호를 입력해주세요.'); return }
+    setLockLoading(true)
+    setLockError('')
+    try {
+      const updated = await usersApi.disableLock(lockCurrentPw, clearEntriesOnDisable)
+      updateUser(updated)
+      setLockModal(null)
+    } catch (e: any) {
+      setLockError(e?.response?.status === 401 ? '비밀번호가 일치하지 않아요.' : '해제에 실패했어요. 다시 시도해주세요.')
+    } finally {
+      setLockLoading(false)
+    }
+  }
+
+  const handleChangeLockPassword = async () => {
+    if (hasLockPassword && !lockCurrentPw) { setLockError('현재 비밀번호를 입력해주세요.'); return }
+    if (lockNewPw.length < 4) { setLockError('새 비밀번호는 4자 이상이어야 해요.'); return }
+    if (lockNewPw !== lockNewPwConfirm) { setLockError('비밀번호가 일치하지 않아요.'); return }
+    setLockLoading(true)
+    setLockError('')
+    try {
+      const updated = await usersApi.changeLockPassword(lockCurrentPw, lockNewPw)
+      updateUser(updated)
+      setLockModal(null)
+    } catch (e: any) {
+      setLockError(e?.response?.status === 401 ? '현재 비밀번호가 일치하지 않아요.' : '변경에 실패했어요. 다시 시도해주세요.')
+    } finally {
+      setLockLoading(false)
     }
   }
 
@@ -286,16 +341,16 @@ export function Settings() {
             <div className="flex-1">
               <h2 className="text-sm font-semibold text-gray-700">일기 열람 잠금</h2>
               <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
-                켜두면 각 일기에 비밀번호를 설정할 수 있어요. 잠금된 일기는 비밀번호를 입력해야만 볼 수 있어요.
+                {lockEnabled
+                  ? '잠금이 켜져 있어요. 일기 화면에서 개별 일기를 잠글 수 있어요.'
+                  : '켜두면 비밀번호로 특정 일기를 잠글 수 있어요.'}
               </p>
             </div>
             <button
-              onClick={handleToggleLock}
-              disabled={lockToggling}
+              onClick={() => lockEnabled ? openLockModal('disable') : openLockModal('setup')}
               className={clsx(
                 'ml-4 relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none',
-                lockEnabled ? 'bg-primary-500' : 'bg-gray-200',
-                lockToggling && 'opacity-60 cursor-not-allowed'
+                lockEnabled ? 'bg-primary-500' : 'bg-gray-200'
               )}
               role="switch"
               aria-checked={lockEnabled}
@@ -308,14 +363,35 @@ export function Settings() {
               />
             </button>
           </div>
-          {lockEnabled && (
-            <motion.p
+          {lockEnabled && !hasLockPassword && (
+            <motion.div
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-xs text-primary-600 bg-primary-50 rounded-lg px-3 py-2"
+              className="flex items-center justify-between bg-amber-50 rounded-lg px-3 py-2"
             >
-              🔒 잠금 기능이 켜졌어요. 일기 열람 화면에서 날짜별로 잠금을 설정할 수 있어요.
-            </motion.p>
+              <p className="text-xs text-amber-700">비밀번호가 설정되지 않았어요.</p>
+              <button
+                onClick={() => openLockModal('setup')}
+                className="text-xs font-medium text-amber-700 underline ml-2"
+              >
+                지금 설정하기
+              </button>
+            </motion.div>
+          )}
+          {lockEnabled && hasLockPassword && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center justify-between"
+            >
+              <p className="text-xs text-gray-400">비밀번호가 설정되어 있어요.</p>
+              <button
+                onClick={() => openLockModal('change')}
+                className="text-xs text-primary-600 font-medium hover:underline"
+              >
+                비밀번호 변경
+              </button>
+            </motion.div>
           )}
         </div>
 
@@ -463,6 +539,156 @@ export function Settings() {
           </button>
         </div>
       </div>
+
+      {/* Lock modals: setup / disable / change */}
+      <AnimatePresence>
+        {lockModal !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
+            onClick={(e) => e.target === e.currentTarget && setLockModal(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-xl"
+            >
+              {/* Setup */}
+              {lockModal === 'setup' && (
+                <>
+                  <div className="text-center space-y-1">
+                    <p className="text-2xl">🔒</p>
+                    <h3 className="text-lg font-bold text-gray-800">잠금 비밀번호 설정</h3>
+                    <p className="text-sm text-gray-500 leading-relaxed">
+                      일기를 잠글 때 사용할 비밀번호를 설정해요. 4자 이상이면 돼요.
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <input
+                      type="password"
+                      value={lockNewPw}
+                      onChange={(e) => { setLockNewPw(e.target.value); setLockError('') }}
+                      placeholder="새 비밀번호 (4자 이상)"
+                      className="input-field text-sm"
+                      autoFocus
+                    />
+                    <input
+                      type="password"
+                      value={lockNewPwConfirm}
+                      onChange={(e) => { setLockNewPwConfirm(e.target.value); setLockError('') }}
+                      placeholder="비밀번호 확인"
+                      className="input-field text-sm"
+                      onKeyDown={(e) => e.key === 'Enter' && handleSetupLock()}
+                    />
+                    {lockError && <p className="text-xs text-red-500">{lockError}</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setLockModal(null)} className="btn-secondary flex-1 text-sm">취소</button>
+                    <button onClick={handleSetupLock} disabled={lockLoading} className="btn-primary flex-1 text-sm disabled:opacity-60">
+                      {lockLoading ? '설정 중...' : '설정하기'}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Disable */}
+              {lockModal === 'disable' && (
+                <>
+                  <div className="text-center space-y-1">
+                    <p className="text-2xl">🔓</p>
+                    <h3 className="text-lg font-bold text-gray-800">잠금 끄기</h3>
+                    <p className="text-sm text-gray-500 leading-relaxed">
+                      현재 비밀번호를 입력하면 잠금 기능이 꺼져요.
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <input
+                      type="password"
+                      value={lockCurrentPw}
+                      onChange={(e) => { setLockCurrentPw(e.target.value); setLockError('') }}
+                      placeholder="현재 비밀번호"
+                      className="input-field text-sm"
+                      autoFocus
+                      onKeyDown={(e) => e.key === 'Enter' && handleDisableLock()}
+                    />
+                    {lockError && <p className="text-xs text-red-500">{lockError}</p>}
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={clearEntriesOnDisable}
+                        onChange={(e) => setClearEntriesOnDisable(e.target.checked)}
+                        className="mt-0.5 rounded"
+                      />
+                      <span className="text-xs text-gray-500 leading-relaxed">
+                        잠금된 일기도 함께 해제할게요
+                        <br />
+                        <span className="text-gray-400">체크 해제 시 잠금 표시는 유지되나 열람은 가능해요</span>
+                      </span>
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setLockModal(null)} className="btn-secondary flex-1 text-sm">취소</button>
+                    <button onClick={handleDisableLock} disabled={lockLoading} className="flex-1 text-sm text-white bg-red-500 hover:bg-red-600 disabled:opacity-60 rounded-xl py-2.5 font-medium transition-colors">
+                      {lockLoading ? '해제 중...' : '잠금 끄기'}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* Change password */}
+              {lockModal === 'change' && (
+                <>
+                  <div className="text-center space-y-1">
+                    <p className="text-2xl">🔑</p>
+                    <h3 className="text-lg font-bold text-gray-800">비밀번호 변경</h3>
+                    <p className="text-sm text-gray-500 leading-relaxed">
+                      현재 비밀번호 확인 후 새 비밀번호를 설정해요.
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    {hasLockPassword && (
+                      <input
+                        type="password"
+                        value={lockCurrentPw}
+                        onChange={(e) => { setLockCurrentPw(e.target.value); setLockError('') }}
+                        placeholder="현재 비밀번호"
+                        className="input-field text-sm"
+                        autoFocus
+                      />
+                    )}
+                    <input
+                      type="password"
+                      value={lockNewPw}
+                      onChange={(e) => { setLockNewPw(e.target.value); setLockError('') }}
+                      placeholder="새 비밀번호 (4자 이상)"
+                      className="input-field text-sm"
+                      autoFocus={!hasLockPassword}
+                    />
+                    <input
+                      type="password"
+                      value={lockNewPwConfirm}
+                      onChange={(e) => { setLockNewPwConfirm(e.target.value); setLockError('') }}
+                      placeholder="새 비밀번호 확인"
+                      className="input-field text-sm"
+                      onKeyDown={(e) => e.key === 'Enter' && handleChangeLockPassword()}
+                    />
+                    {lockError && <p className="text-xs text-red-500">{lockError}</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setLockModal(null)} className="btn-secondary flex-1 text-sm">취소</button>
+                    <button onClick={handleChangeLockPassword} disabled={lockLoading} className="btn-primary flex-1 text-sm disabled:opacity-60">
+                      {lockLoading ? '변경 중...' : '변경하기'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Delete confirmation modal */}
       <AnimatePresence>

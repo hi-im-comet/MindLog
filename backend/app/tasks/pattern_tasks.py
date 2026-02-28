@@ -15,11 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 @celery.task(bind=True, max_retries=2, default_retry_delay=120)
-def analyze_user_patterns(self, user_id: str, period_days: int = 7):
+def analyze_user_patterns(self, user_id: str, period_type: str = 'weekly'):
     """특정 사용자의 패턴 분석을 실행하는 Celery 태스크."""
     try:
         from app.services.pattern_analyzer import analyze_patterns
-        log = analyze_patterns(user_id, period_days=period_days)
+        log = analyze_patterns(user_id, period_type=period_type)
         if log:
             logger.info(f'패턴 분석 완료: user_id={user_id}, log_id={log.id}')
             return str(log.id)

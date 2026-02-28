@@ -27,8 +27,7 @@ class JournalEntry(db.Model):
     daily_summary = db.Column(db.Text, nullable=True)
     summary_generated_at = db.Column(db.DateTime(timezone=True), nullable=True)
     is_draft = db.Column(db.Boolean, default=False)
-    is_locked = db.Column(db.Boolean, default=False)
-    lock_password_hash = db.Column(db.String(255), nullable=True)
+    is_locked = db.Column(db.Boolean, default=False)  # 잠금 여부 (비밀번호는 user_profiles에 전역 저장)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                             onupdate=lambda: datetime.now(timezone.utc))

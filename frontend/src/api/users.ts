@@ -5,7 +5,6 @@ export interface UpdateMePayload {
   display_name?: string
   timezone?: string
   ai_name?: string | null
-  entry_lock_enabled?: boolean
 }
 
 export const usersApi = {
@@ -16,6 +15,32 @@ export const usersApi = {
 
   updateMe: async (payload: UpdateMePayload): Promise<User> => {
     const { data } = await apiClient.patch('/api/users/me', payload)
+    return data.data.user
+  },
+
+  setupLock: async (password: string): Promise<User> => {
+    const { data } = await apiClient.post('/api/users/me/setup-lock', { password })
+    return data.data.user
+  },
+
+  disableLock: async (password: string, clearEntries = false): Promise<User> => {
+    const { data } = await apiClient.post('/api/users/me/disable-lock', {
+      password,
+      clear_entries: clearEntries,
+    })
+    return data.data.user
+  },
+
+  verifyLock: async (password: string): Promise<boolean> => {
+    const { data } = await apiClient.post('/api/users/me/verify-lock', { password })
+    return data.data.verified
+  },
+
+  changeLockPassword: async (currentPassword: string, newPassword: string): Promise<User> => {
+    const { data } = await apiClient.post('/api/users/me/change-lock-password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    })
     return data.data.user
   },
 

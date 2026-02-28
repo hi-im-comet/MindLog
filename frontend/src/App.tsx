@@ -27,26 +27,16 @@ const queryClient = new QueryClient({
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 
 export default function App() {
-  const { accessToken, updateUser, logout, setInitialized } = useAuthStore()
+  const { accessToken, updateUser, setInitialized } = useAuthStore()
 
-  // 앱 시작 시 저장된 토큰으로 유저 정보를 서버에서 재검증
+  // 앱 시작 시 초기화
+  // localStorage에 토큰이 있으면 즉시 인증 상태로 복원 (로그인 화면 방지)
+  // getMe()는 백그라운드에서 유저 정보만 최신화 (blocking하지 않음)
   useEffect(() => {
-    if (!accessToken) {
-      setInitialized(true)
-      return
+    setInitialized(true)
+    if (accessToken) {
+      usersApi.getMe().then(updateUser).catch(() => {})
     }
-
-    usersApi
-      .getMe()
-      .then((user) => {
-        updateUser(user)
-        setInitialized(true)
-      })
-      .catch(() => {
-        // 토큰 만료/무효 — client.ts 인터셉터가 이미 refresh 시도 후 logout 처리
-        logout()
-        setInitialized(true)
-      })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
