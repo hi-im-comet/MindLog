@@ -128,6 +128,7 @@ function LockVerifyOverlay({ onVerified }: { onVerified: () => void }) {
 function TagEditor({ tags, onSave }: { tags: string[]; onSave: (tags: string[]) => void }) {
   const [input, setInput] = useState('')
   const [localTags, setLocalTags] = useState(tags)
+  const [isComposing, setIsComposing] = useState(false)
 
   const addTag = () => {
     const t = input.trim().replace(/^#/, '')
@@ -167,8 +168,10 @@ function TagEditor({ tags, onSave }: { tags: string[]; onSave: (tags: string[]) 
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); addTag() }
+            if (e.key === 'Enter' && !isComposing) { e.preventDefault(); addTag() }
           }}
           placeholder="태그 추가 (Enter)"
           maxLength={30}

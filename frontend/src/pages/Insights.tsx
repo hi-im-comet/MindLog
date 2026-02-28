@@ -1,8 +1,12 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { format } from 'date-fns'
+import { ko } from 'date-fns/locale'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Layout } from '@/components/shared/Layout'
 import { PatternCard } from '@/components/insights/PatternCard'
 import { patternsApi } from '@/api/patterns'
+import { entriesApi } from '@/api/entries'
 import { clsx } from 'clsx'
 import type { PatternLog } from '@/types/pattern'
 
@@ -23,6 +27,7 @@ const TAB_DESCRIPTIONS: Record<LogTab, string> = {
 export function Insights() {
   const [tab, setTab] = useState<LogTab>('weekly')
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   // 각 탭별 최신 로그 목록 조회 (최대 5개)
   const { data: weeklyLogs = [], isLoading: weeklyLoading } = useQuery({
@@ -68,6 +73,24 @@ export function Insights() {
 
   const handlePatternUpdate = (id: string, body: string) => updatePatternMutation.mutate({ id, body })
   const handlePatternDelete = (id: string) => deletePatternMutation.mutate(id)
+
+  // 태그별 날짜 목록
+  const { data: allEntriesData } = useQuery({
+    queryKey: ['entries-for-tags'],
+    queryFn: () => entriesApi.list({ limit: 200, page: 1 }),
+    staleTime: 1000 * 60 * 2,
+  })
+
+  const { tagMap, tagList } = useMemo(() => {
+    const map: Record<string, Array<{ date: string; id: string }>> = {}
+    for (const entry of allEntriesData?.entries ?? []) {
+      for (const tag of entry.tags ?? []) {
+        if (!map[tag]) map[tag] = []
+        map[tag].push({ date: entry.entry_date, id: entry.id })
+      }
+    }
+    return { tagMap: map, tagList: Object.keys(map).sort() }
+  }, [allEntriesData])
 
   // 현재 탭의 로그/로딩 상태
   const currentLogs: PatternLog[] =
@@ -154,6 +177,28 @@ export function Insights() {
               {tab === 'semiannual' && '6개월 분석이 아직 없어요.'}
             </p>
             <p className="text-xs">일기를 작성한 뒤 "지금 분석" 버튼을 눌러보세요.</p>
+          </div>
+        )}
+        {/* 태그별 날짜 목록 */}
+        {tagList.length > 0 && (
+          <div className="space-y-3 pt-2">
+            <h3 className="text-sm font-semibold text-gray-700">태그별 기록</h3>
+            {tagList.map((tag) => (
+              <div key={tag} className="card p-4">
+                <p className="text-xs font-medium text-gray-500 mb-2.5">#{tag}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {tagMap[tag].map(({ date, id }) => (
+                    <button
+                      key={id}
+                      onClick={() => navigate(`/view/${id}`)}
+                      className="text-xs text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-full px-2.5 py-1 transition-colors"
+                    >
+                      {format(new Date(date + 'T00:00:00'), 'M.d (EEE)', { locale: ko })}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
