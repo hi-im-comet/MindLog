@@ -33,6 +33,10 @@ class UserUpdateSchema(Schema):
     ai_name = fields.String(allow_none=True, validate=validate.Length(max=50))
     auto_lock_enabled = fields.Boolean()
     auto_lock_timeout = fields.Integer(validate=validate.Range(min=1, max=120))
+    ai_mood_default = fields.String(validate=validate.OneOf(
+        ['empathy', 'advice', 'reflection', 'friend', 'objective']
+    ))
+    ai_response_length_default = fields.String(validate=validate.OneOf(['short', 'normal', 'long']))
     # entry_lock_enabled은 setup-lock / disable-lock 전용 엔드포인트로만 변경 가능
 
 
@@ -72,6 +76,8 @@ def update_me():
     ai_name = data.pop('ai_name', ...)  # ... = field not provided
     auto_lock_enabled = data.pop('auto_lock_enabled', ...)
     auto_lock_timeout = data.pop('auto_lock_timeout', ...)
+    ai_mood_default = data.pop('ai_mood_default', ...)
+    ai_response_length_default = data.pop('ai_response_length_default', ...)
 
     for key, value in data.items():
         setattr(user, key, value)
@@ -86,6 +92,10 @@ def update_me():
         user.profile.auto_lock_enabled = auto_lock_enabled
     if auto_lock_timeout is not ...:
         user.profile.auto_lock_timeout = auto_lock_timeout
+    if ai_mood_default is not ...:
+        user.profile.ai_mood_default = ai_mood_default
+    if ai_response_length_default is not ...:
+        user.profile.ai_response_length_default = ai_response_length_default
 
     db.session.commit()
     return api_response({'user': user.to_dict(include_profile=True)})

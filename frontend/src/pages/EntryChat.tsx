@@ -3,11 +3,13 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
+import { clsx } from 'clsx'
 import { Layout } from '@/components/shared/Layout'
 import { ConversationPanel } from '@/components/conversation/ConversationPanel'
 import { conversationsApi } from '@/api/conversations'
 import { entriesApi } from '@/api/entries'
 import { useAuthStore } from '@/store/authStore'
+import { MOOD_OPTIONS } from '@/constants/aiMood'
 import type { ResponseMode } from '@/types/conversation'
 
 export function EntryChat() {
@@ -17,8 +19,10 @@ export function EntryChat() {
   const { user } = useAuthStore()
   const aiName = user?.profile?.ai_name ?? undefined
   const userName = user?.display_name ?? undefined
-  const [responseMode] = useState<ResponseMode>('empathetic')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [activeMood, setActiveMood] = useState<string>(
+    user?.profile?.ai_mood_default || 'empathy'
+  )
 
   const { data: entry, isLoading: entryLoading } = useQuery({
     queryKey: ['entry', id],
@@ -28,7 +32,7 @@ export function EntryChat() {
 
   const { data: conversation, isLoading: convLoading } = useQuery({
     queryKey: ['conversation', id],
-    queryFn: () => conversationsApi.start(id!, responseMode),
+    queryFn: () => conversationsApi.start(id!),
     enabled: !!entry && !entry.is_draft,
     staleTime: Infinity,
   })
@@ -49,6 +53,12 @@ export function EntryChat() {
       queryClient.invalidateQueries({ queryKey: ['entries'] })
     },
   })
+
+  const handleMoodChange = async (mood: string) => {
+    setActiveMood(mood)
+    if (id) await entriesApi.update(id, { ai_mood_override: mood })
+    if (conversation) await conversationsApi.updateMode(conversation.id, mood as ResponseMode)
+  }
 
   if (entryLoading || convLoading) {
     return (
@@ -85,6 +95,7 @@ export function EntryChat() {
   }
 
   const dateLabel = format(new Date(entry.entry_date + 'T00:00:00'), 'M월 d일 EEEE', { locale: ko })
+  const displayMood = entry.ai_mood_override || activeMood
 
   return (
     <Layout>
@@ -136,6 +147,24 @@ export function EntryChat() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* 무드 칩 */}
+        <div className="flex items-center gap-1 py-2 flex-shrink-0 overflow-x-auto">
+          {MOOD_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => handleMoodChange(opt.value)}
+              className={clsx(
+                'flex-shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors',
+                displayMood === opt.value
+                  ? 'border-primary-400 bg-primary-50 text-primary-600 font-medium'
+                  : 'border-gray-200 text-gray-400 hover:border-gray-300',
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
 
         {/* Conversation */}

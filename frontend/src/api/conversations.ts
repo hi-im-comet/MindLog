@@ -3,10 +3,10 @@ import type { Conversation, ResponseMode, SSEEvent } from '@/types/conversation'
 
 export const conversationsApi = {
   /** 대화 시작 또는 기존 대화 반환 */
-  start: async (entryId: string, responseMode: ResponseMode = 'empathetic'): Promise<Conversation> => {
+  start: async (entryId: string, responseMode?: ResponseMode): Promise<Conversation> => {
     const res = await apiClient.post('/api/conversations', {
       entry_id: entryId,
-      response_mode: responseMode,
+      ...(responseMode ? { response_mode: responseMode } : {}),
     })
     return res.data.data.conversation
   },

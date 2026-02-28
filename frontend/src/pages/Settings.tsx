@@ -11,6 +11,7 @@ import { ko } from 'date-fns/locale'
 import { Layout } from '@/components/shared/Layout'
 import { useAuthStore } from '@/store/authStore'
 import { usersApi } from '@/api/users'
+import { MOOD_OPTIONS, LENGTH_OPTIONS } from '@/constants/aiMood'
 
 const schema = z.object({
   display_name: z.string().min(1, '이름을 입력해주세요.').max(100),
@@ -156,6 +157,30 @@ export function Settings() {
   const autoLockEnabled = user?.profile?.auto_lock_enabled ?? false
   const autoLockTimeout = user?.profile?.auto_lock_timeout ?? 30
   const [autoLockSaving, setAutoLockSaving] = useState(false)
+  const [moodSaving, setMoodSaving] = useState(false)
+
+  const currentMood = user?.profile?.ai_mood_default || 'empathy'
+  const currentLength = user?.profile?.ai_response_length_default || 'normal'
+
+  const handleMoodChange = async (mood: string) => {
+    setMoodSaving(true)
+    try {
+      const updated = await usersApi.updateMe({ ai_mood_default: mood })
+      updateUser(updated)
+    } catch { /* ignore */ } finally {
+      setMoodSaving(false)
+    }
+  }
+
+  const handleLengthChange = async (len: string) => {
+    setMoodSaving(true)
+    try {
+      const updated = await usersApi.updateMe({ ai_response_length_default: len })
+      updateUser(updated)
+    } catch { /* ignore */ } finally {
+      setMoodSaving(false)
+    }
+  }
 
   const handleAutoLockToggle = async () => {
     setAutoLockSaving(true)
@@ -396,6 +421,59 @@ export function Settings() {
             {isSubmitting ? '저장 중...' : '저장하기'}
           </button>
         </form>
+
+        {/* AI 응답 스타일 */}
+        <div className="card p-6 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700">AI 응답 스타일</h2>
+            <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
+              AI가 대화할 때 기본으로 사용할 톤과 길이를 정해요.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-gray-500">기본 대화 톤</p>
+            <div className="grid grid-cols-5 gap-1.5">
+              {MOOD_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => handleMoodChange(opt.value)}
+                  disabled={moodSaving}
+                  className={clsx(
+                    'flex flex-col items-center gap-0.5 py-2.5 px-1 rounded-xl text-xs font-medium border-2 transition-all disabled:opacity-60',
+                    currentMood === opt.value
+                      ? 'border-primary-400 bg-primary-50 text-primary-600'
+                      : 'border-transparent bg-gray-50 text-gray-500 hover:border-gray-200',
+                  )}
+                >
+                  <span className="font-semibold">{opt.label}</span>
+                  <span className="text-[10px] text-gray-400 text-center leading-tight">{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-gray-500">응답 길이</p>
+            <div className="flex gap-2">
+              {LENGTH_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => handleLengthChange(opt.value)}
+                  disabled={moodSaving}
+                  className={clsx(
+                    'px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all disabled:opacity-60',
+                    currentLength === opt.value
+                      ? 'border-primary-400 bg-primary-50 text-primary-600'
+                      : 'border-transparent bg-gray-50 text-gray-500 hover:border-gray-200',
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* 일기 잠금 설정 */}
         <div className="card p-6 space-y-3">

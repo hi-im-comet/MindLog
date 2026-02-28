@@ -12,6 +12,8 @@ export interface UserProfile {
   auto_lock_enabled: boolean
   auto_lock_timeout: number
   last_analysis_at: string | null
+  ai_mood_default: string
+  ai_response_length_default: string
 }
 
 export interface User {

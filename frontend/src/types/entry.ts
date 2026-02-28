@@ -18,6 +18,8 @@ export interface JournalEntry {
   is_locked: boolean
   is_favorite: boolean
   tags: string[]
+  ai_mood_override: string | null
+  ai_response_length_override: string | null
   categories: JournalCategory[]
   category_segments?: CategorySegment[]
   has_conversation: boolean
@@ -55,4 +57,6 @@ export interface EntryUpdateInput {
   is_draft?: boolean
   is_favorite?: boolean
   tags?: string[]
+  ai_mood_override?: string | null
+  ai_response_length_override?: string | null
 }

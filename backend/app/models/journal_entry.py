@@ -30,6 +30,8 @@ class JournalEntry(db.Model):
     is_locked = db.Column(db.Boolean, default=False)  # 잠금 여부 (비밀번호는 user_profiles에 전역 저장)
     is_favorite = db.Column(db.Boolean, default=False, nullable=False)
     tags = db.Column(db.JSON, default=list)
+    ai_mood_override = db.Column(db.String(20), nullable=True)
+    ai_response_length_override = db.Column(db.String(10), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                             onupdate=lambda: datetime.now(timezone.utc))
@@ -60,6 +62,8 @@ class JournalEntry(db.Model):
             'is_locked': self.is_locked or False,
             'is_favorite': self.is_favorite or False,
             'tags': self.tags or [],
+            'ai_mood_override': self.ai_mood_override,
+            'ai_response_length_override': self.ai_response_length_override,
             'categories': [c.to_dict() for c in (self.categories or [])],
             'has_conversation': self.conversation is not None,
             'created_at': self.created_at.isoformat() if self.created_at else None,

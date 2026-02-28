@@ -53,7 +53,8 @@ message_schema = SendMessageSchema()
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
-def _build_system_prompt_with_entry(conv: Conversation, entry: JournalEntry, user_id: str) -> str:
+def _build_system_prompt_with_entry(conv: Conversation, entry: JournalEntry, user_id: str,
+                                    response_length: str = 'normal') -> str:
     """시스템 프롬프트에 일기 원문 + AI 추출 데이터 + 최근 요약을 포함한다."""
     from app.models.user import User
     profile = UserProfile.query.filter_by(user_id=user_id).first()
@@ -70,6 +71,7 @@ def _build_system_prompt_with_entry(conv: Conversation, entry: JournalEntry, use
         categories=categories,
         user_name=user_name,
         ai_name=ai_name,
+        response_length=response_length,
     )
 
     system_prompt += f'\n\n【오늘 일기 원문】\n{entry.raw_content}'
@@ -126,18 +128,28 @@ def start_or_get_conversation():
         .first_or_404()
     )
 
+    profile = UserProfile.query.filter_by(user_id=user_id).first()
+    effective_mode = (
+        entry.ai_mood_override
+        or (profile.ai_mood_default if profile else None)
+        or 'empathy'
+    )
+
     existing = Conversation.query.filter_by(entry_id=entry_id).first()
     if existing:
-        new_mode = data.get('response_mode', 'empathetic')
-        if new_mode != existing.response_mode:
-            existing.response_mode = new_mode
-            db.session.commit()
+        # 클라이언트가 명시적으로 mode를 보낸 경우에만 업데이트
+        requested_mode = request.get_json(silent=True) or {}
+        if 'response_mode' in requested_mode:
+            new_mode = data.get('response_mode', existing.response_mode)
+            if new_mode != existing.response_mode:
+                existing.response_mode = new_mode
+                db.session.commit()
         return api_response({'conversation': existing.to_dict(include_messages=True)})
 
     conv = Conversation(
         entry_id=entry_id,
         user_id=user_id,
-        response_mode=data.get('response_mode', 'empathetic'),
+        response_mode=effective_mode,
     )
     db.session.add(conv)
     db.session.flush()
@@ -259,7 +271,14 @@ def send_message(conv_id):
 
     entry = conv.entry
     try:
-        system_prompt = _build_system_prompt_with_entry(conv, entry, user_id)
+        _profile = UserProfile.query.filter_by(user_id=user_id).first()
+        effective_length = (
+            entry.ai_response_length_override
+            or (_profile.ai_response_length_default if _profile else None)
+            or 'normal'
+        )
+        system_prompt = _build_system_prompt_with_entry(conv, entry, user_id,
+                                                        response_length=effective_length)
     except Exception as e:
         logger.error(f'시스템 프롬프트 조립 실패: {e}')
         system_prompt = 'You are a supportive journaling companion. Listen and respond warmly.'

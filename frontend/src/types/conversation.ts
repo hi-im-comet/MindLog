@@ -1,4 +1,6 @@
-export type ResponseMode = 'empathetic' | 'advice' | 'pattern_recognition'
+export type ResponseMode =
+  | 'empathy' | 'advice' | 'reflection' | 'friend' | 'objective'
+  | 'empathetic' | 'pattern_recognition'
 
 export interface ConversationMessage {
   id: string

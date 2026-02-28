@@ -145,6 +145,10 @@ class EntryUpdateSchema(Schema):
     is_draft = fields.Boolean()
     is_favorite = fields.Boolean()
     tags = fields.List(fields.String(validate=validate.Length(max=30)), validate=validate.Length(max=10))
+    ai_mood_override = fields.String(allow_none=True,
+        validate=validate.OneOf(['empathy', 'advice', 'reflection', 'friend', 'objective', None]))
+    ai_response_length_override = fields.String(allow_none=True,
+        validate=validate.OneOf(['short', 'normal', 'long', None]))
 
 
 create_schema = EntryCreateSchema()

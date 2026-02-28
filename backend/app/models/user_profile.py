@@ -24,6 +24,8 @@ class UserProfile(db.Model):
     failed_lock_at = db.Column(db.DateTime(timezone=True), nullable=True)
     auto_lock_enabled = db.Column(db.Boolean, default=False, nullable=False)
     auto_lock_timeout = db.Column(db.Integer, default=30, nullable=False)  # 분 단위
+    ai_mood_default = db.Column(db.String(20), nullable=False, default='empathy')
+    ai_response_length_default = db.Column(db.String(10), nullable=False, default='normal')
     last_analysis_at = db.Column(db.DateTime(timezone=True), nullable=True)
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                             onupdate=lambda: datetime.now(timezone.utc))
@@ -45,6 +47,8 @@ class UserProfile(db.Model):
             'has_lock_password': self.lock_password_hash is not None,
             'auto_lock_enabled': self.auto_lock_enabled or False,
             'auto_lock_timeout': self.auto_lock_timeout or 30,
+            'ai_mood_default': self.ai_mood_default or 'empathy',
+            'ai_response_length_default': self.ai_response_length_default or 'normal',
             'last_analysis_at': self.last_analysis_at.isoformat() if self.last_analysis_at else None,
         }
 

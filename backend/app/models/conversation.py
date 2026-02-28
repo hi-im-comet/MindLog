@@ -2,7 +2,10 @@ import uuid
 from datetime import datetime, timezone
 from app.extensions import db
 
-VALID_RESPONSE_MODES = ('empathetic', 'advice', 'pattern_recognition')
+VALID_RESPONSE_MODES = (
+    'empathy', 'advice', 'reflection', 'friend', 'objective',
+    'empathetic', 'pattern_recognition',  # 레거시 backward compat
+)
 
 
 class Conversation(db.Model):

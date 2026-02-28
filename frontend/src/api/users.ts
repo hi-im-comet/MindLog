@@ -7,6 +7,8 @@ export interface UpdateMePayload {
   ai_name?: string | null
   auto_lock_enabled?: boolean
   auto_lock_timeout?: number
+  ai_mood_default?: string
+  ai_response_length_default?: string
 }
 
 export const usersApi = {

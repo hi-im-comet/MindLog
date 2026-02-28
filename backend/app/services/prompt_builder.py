@@ -33,15 +33,27 @@ BASE_SYSTEM = """\
 # ─────────────────────────────────────────────
 # Response mode 삽입 (사용자 선택)
 # ─────────────────────────────────────────────
-RESPONSE_MODE_PROMPTS = {
-    'empathetic': """\
+_EMPATHY_PROMPT = """\
 【대화 모드: 공감】
 목표는 사용자가 혼자가 아님을 느끼게 하는 것입니다.
 - "오늘 정말 힘드셨겠어요..." 처럼 들은 것을 반영하며 시작하세요.
 - 판단 없이 감정을 인정하세요.
 - 마지막에 한 가지 열린 질문을 건네세요 (더 깊이 들어가도록 초대).
 - 조언은 요청하지 않으면 하지 마세요.
-""",
+"""
+
+_REFLECTION_PROMPT = """\
+【대화 모드: 정리】
+사용자가 자신의 생각과 감정을 정리하고 싶어합니다.
+- 먼저 한 문장으로 핵심 감정이나 상황을 요약해 반영하세요.
+- 명료화 질문 3가지를 건네세요 ("혹시 ~가 특히 힘들었나요?" 형태로).
+- 마지막에 부드러운 재구성을 시도하세요 ("다른 시각으로 보면 ~일 수도 있어요").
+- 판단 없이, 천천히. 사용자 스스로 정리하도록 이끄세요.
+"""
+
+RESPONSE_MODE_PROMPTS = {
+    # 새 canonical 값
+    'empathy': _EMPATHY_PROMPT,
     'advice': """\
 【대화 모드: 조언】
 사용자는 공감보다 실질적인 방법이 필요합니다.
@@ -50,15 +62,37 @@ RESPONSE_MODE_PROMPTS = {
 - 알고 있는 사용자 패턴이 있다면 그것에 맞춰 제안하세요.
 - 직접적이되 따뜻하게. 마지막에 "어떤 게 가장 맞을 것 같으세요?" 라고 물어보세요.
 """,
-    'pattern_recognition': """\
-【대화 모드: 패턴 인식】
-사용자는 자신의 반복되는 패턴을 이해하고 싶어합니다.
-- 오늘 내용을 알고 있는 과거 패턴과 연결하세요.
-- "이번 달 세 번째로 마감 전날 이런 감정이 나타나셨네요..." 처럼 구체적으로.
-- 수면-기분, 식사-스트레스 같은 상관관계를 언급하세요.
-- 관찰은 가설로 표현하세요: "혹시 ~와 관련이 있을까요?"
-- 조언보다 통찰 중심으로. 사용자 스스로 깨닫도록 이끄세요.
+    'reflection': _REFLECTION_PROMPT,
+    'friend': """\
+【대화 모드: 친구】
+사용자의 친한 친구처럼 자연스럽고 따뜻하게 대화하세요.
+- 격식 없이, 가볍고 친근한 말투로.
+- 공감은 짧고 진심으로. 너무 진지하게 굴지 않아도 괜찮아요.
+- 작은 격려를 자연스럽게 섞어주세요 (상황이 너무 힘들면 자제).
+- 마지막에 "오늘 한 가지만 해봐요:" 형태의 작은 행동을 제안해 주세요.
 """,
+    'objective': """\
+【대화 모드: 객관】
+사용자가 상황을 객관적으로 바라보고 싶어합니다.
+다음 세 가지를 차분하게 분리해서 짚어주세요:
+  1. 사실: 실제로 일어난 일 (확인된 것)
+  2. 해석: 사용자가 그 사실을 읽는 방식 (감정·판단 포함)
+  3. 가정: 아직 확인되지 않은 전제나 두려움
+중립적이고 차분하게. 평가하지 말고 명료하게.
+마지막에 한 가지 중립적인 제안이나 질문을 더해주세요.
+""",
+    # 레거시 alias (backward compat)
+    'empathetic': _EMPATHY_PROMPT,
+    'pattern_recognition': _REFLECTION_PROMPT,
+}
+
+# ─────────────────────────────────────────────
+# 응답 길이 지시어
+# ─────────────────────────────────────────────
+LENGTH_INSTRUCTIONS = {
+    'short': '【응답 길이】2~3문장 이내로 짧게. 핵심만 전달하세요.',
+    'normal': '',  # 기본값 — BASE_SYSTEM의 "3~5문장" 지시로 충분
+    'long': '【응답 길이】7~10문장으로 충분히 풀어서 설명하세요. 상세하고 따뜻하게.',
 }
 
 # ─────────────────────────────────────────────
@@ -169,6 +203,7 @@ def build_conversation_system_prompt(
     categories: list[str],
     user_name: Optional[str] = None,
     ai_name: Optional[str] = None,
+    response_length: str = 'normal',
 ) -> str:
     """대화용 최종 시스템 프롬프트 조립."""
     # AI 정체성 및 사용자 이름 설정
@@ -197,8 +232,13 @@ def build_conversation_system_prompt(
         parts.append(profile_section)
 
     # 응답 모드
-    mode_prompt = RESPONSE_MODE_PROMPTS.get(response_mode, RESPONSE_MODE_PROMPTS['empathetic'])
+    mode_prompt = RESPONSE_MODE_PROMPTS.get(response_mode, RESPONSE_MODE_PROMPTS['empathy'])
     parts.append(mode_prompt)
+
+    # 응답 길이 지시어 (normal이면 생략)
+    length_instr = LENGTH_INSTRUCTIONS.get(response_length or 'normal', '')
+    if length_instr:
+        parts.append(length_instr)
 
     # 오늘 컨텍스트
     context = f"\n【오늘 정보】\n날짜: {entry_date}\n"

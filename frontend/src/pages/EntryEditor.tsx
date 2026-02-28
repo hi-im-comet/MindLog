@@ -11,12 +11,13 @@ import { conversationsApi } from '@/api/conversations'
 import { usersApi } from '@/api/users'
 import { useAuthStore } from '@/store/authStore'
 import { CrisisResourceBanner } from '@/components/conversation/CrisisResourceBanner'
-import type { Conversation, ConversationMessage } from '@/types/conversation'
+import { MOOD_OPTIONS, LENGTH_OPTIONS } from '@/constants/aiMood'
+import type { Conversation, ConversationMessage, ResponseMode } from '@/types/conversation'
 
 export function EntryEditor() {
   const { date: dateParam } = useParams<{ date?: string }>()
   const navigate = useNavigate()
-  const { updateUser } = useAuthStore()
+  const { updateUser, user } = useAuthStore()
 
   const entryDate = dateParam || format(new Date(), 'yyyy-MM-dd')
   const dateLabel = format(new Date(entryDate + 'T00:00:00'), 'M월 d일 EEEE', { locale: ko })
@@ -30,6 +31,10 @@ export function EntryEditor() {
   // 즐겨찾기
   const [isFavorite, setIsFavorite] = useState(false)
   const [favPending, setFavPending] = useState(false)
+
+  // AI 무드 / 길이 오버라이드
+  const [activeMood, setActiveMood] = useState<string>(user?.profile?.ai_mood_default || 'empathy')
+  const [activeLength, setActiveLength] = useState<string>(user?.profile?.ai_response_length_default || 'normal')
 
   // 채팅 UI 상태
   const [inputValue, setInputValue] = useState('')
@@ -71,6 +76,8 @@ export function EntryEditor() {
             userMessagesRef.current = existing.raw_content.split('\n\n').filter(Boolean)
           }
           setIsFavorite(existing.is_favorite ?? false)
+          setActiveMood(existing.ai_mood_override || user?.profile?.ai_mood_default || 'empathy')
+          setActiveLength(existing.ai_response_length_override || user?.profile?.ai_response_length_default || 'normal')
         } else {
           const created = await entriesApi.create({
             entry_date: entryDate,
@@ -83,7 +90,7 @@ export function EntryEditor() {
         if (cancelled) return
         setEntryId(eid)
 
-        const conversation = await conversationsApi.start(eid, 'empathetic')
+        const conversation = await conversationsApi.start(eid)
         if (cancelled) return
         setConv(conversation)
         setMessages(conversation.messages ?? [])
@@ -201,6 +208,22 @@ export function EntryEditor() {
     }
   }
 
+  const handleMoodChange = async (mood: string) => {
+    if (!entryId) return
+    setActiveMood(mood)
+    await entriesApi.update(entryId, { ai_mood_override: mood })
+    if (conv) {
+      const updated = await conversationsApi.updateMode(conv.id, mood as ResponseMode)
+      setConv(updated)
+    }
+  }
+
+  const handleLengthChange = async (len: string) => {
+    if (!entryId) return
+    setActiveLength(len)
+    await entriesApi.update(entryId, { ai_response_length_override: len })
+  }
+
   const userMessageCount = messages.filter((m) => m.role === 'user').length
 
   if (isInitializing) {
@@ -248,9 +271,42 @@ export function EntryEditor() {
           </div>
         </div>
 
+        {/* 무드/길이 칩 */}
+        <div className="flex items-center gap-1 pt-2 pb-1 flex-shrink-0 overflow-x-auto">
+          {MOOD_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => handleMoodChange(opt.value)}
+              className={clsx(
+                'flex-shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors',
+                activeMood === opt.value
+                  ? 'border-primary-400 bg-primary-50 text-primary-600 font-medium'
+                  : 'border-gray-200 text-gray-400 hover:border-gray-300',
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+          <span className="flex-shrink-0 text-gray-200 mx-1 select-none">|</span>
+          {LENGTH_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => handleLengthChange(opt.value)}
+              className={clsx(
+                'flex-shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors',
+                activeLength === opt.value
+                  ? 'border-primary-400 bg-primary-50 text-primary-600 font-medium'
+                  : 'border-gray-200 text-gray-400 hover:border-gray-300',
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         {/* Crisis banner */}
         {hasCrisis && !crisisDismissed && (
-          <div className="pt-3 flex-shrink-0">
+          <div className="pt-1 flex-shrink-0">
             <CrisisResourceBanner onDismiss={() => setCrisisDismissed(true)} />
           </div>
         )}
