@@ -295,6 +295,12 @@ def export_me():
                 .order_by(PatternLog.generated_at.desc())
                 .all())
 
+    def entry_with_conversation(e):
+        d = e.to_dict(full=True)
+        if e.conversation:
+            d['conversation'] = e.conversation.to_dict(include_messages=True)
+        return d
+
     export = {
         'exported_at': datetime.now(timezone.utc).isoformat(),
         'user': {
@@ -302,7 +308,7 @@ def export_me():
             'email': user.email,
             'created_at': user.created_at.isoformat() if user.created_at else None,
         },
-        'entries': [e.to_dict(full=True) for e in entries],
+        'entries': [entry_with_conversation(e) for e in entries],
         'patterns': [p.to_dict() for p in patterns],
     }
     return api_response({'export': export})

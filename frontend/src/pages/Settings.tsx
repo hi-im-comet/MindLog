@@ -20,6 +20,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 type ExportFormat = 'json' | 'txt' | 'pdf' | 'hwp'
 type ExportRange = 'all' | 'dateRange'
+type ExportSort = 'desc' | 'asc'
 
 const FORMAT_OPTIONS: { value: ExportFormat; label: string; ext: string; ready: boolean }[] = [
   { value: 'json', label: 'JSON', ext: '.json', ready: true },
@@ -44,6 +45,9 @@ function buildTxt(exportData: any): string {
     if (entry.categories?.length > 0) {
       lines.push(`카테고리: ${entry.categories.map((c: any) => c.name).join(', ')}`)
     }
+    if (entry.tags?.length > 0) {
+      lines.push(`태그: ${entry.tags.map((t: string) => '#' + t).join(' ')}`)
+    }
     lines.push('')
     if (entry.raw_content) {
       lines.push('[대화 내용]')
@@ -54,6 +58,14 @@ function buildTxt(exportData: any): string {
       lines.push('[AI 분석]')
       for (const seg of entry.category_segments) {
         lines.push(`${seg.category}: ${seg.content}`)
+      }
+    }
+    if (entry.conversation?.messages?.length > 0) {
+      lines.push('')
+      lines.push('[AI와의 대화]')
+      for (const msg of entry.conversation.messages) {
+        const speaker = msg.role === 'user' ? '나' : (exportData.user?.ai_name || 'AI')
+        lines.push(`${speaker}: ${msg.content}`)
       }
     }
     lines.push('')
@@ -89,7 +101,17 @@ function openPrintWindow(exportData: any): void {
         entry.category_segments?.length > 0
           ? `<div style="margin-top:12px;padding:10px;background:#f8f8f8;border-radius:8px;">${entry.category_segments.map((s: any) => `<p style="margin:4px 0;font-size:13px;"><b>${s.category}</b>: ${s.content}</p>`).join('')}</div>`
           : ''
-      return `<div style="margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid #eee;"><h3 style="margin:0 0 4px;font-size:15px;">${dateStr}</h3>${cats}<p style="font-size:14px;line-height:1.7;">${content}</p>${segments}</div>`
+      const aiName = exportData.user?.ai_name || 'AI'
+      const conversation =
+        entry.conversation?.messages?.length > 0
+          ? `<div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;"><p style="font-size:12px;font-weight:600;color:#888;margin-bottom:8px;">AI와의 대화</p>${entry.conversation.messages.map((m: any) => {
+              const speaker = m.role === 'user' ? '나' : aiName
+              const bg = m.role === 'user' ? '#f0f4ff' : '#f8f8f8'
+              const align = m.role === 'user' ? 'right' : 'left'
+              return `<div style="text-align:${align};margin-bottom:8px;"><span style="display:inline-block;background:${bg};border-radius:12px;padding:6px 10px;font-size:13px;max-width:80%;text-align:left;"><b style="font-size:11px;color:#999;">${speaker}</b><br>${m.content.replace(/\n/g, '<br>')}</span></div>`
+            }).join('')}</div>`
+          : ''
+      return `<div style="margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid #eee;"><h3 style="margin:0 0 4px;font-size:15px;">${dateStr}</h3>${cats}<p style="font-size:14px;line-height:1.7;">${content}</p>${segments}${conversation}</div>`
     })
     .join('')
 
@@ -229,6 +251,7 @@ export function Settings() {
   // Export options
   const [exportFormat, setExportFormat] = useState<ExportFormat>('json')
   const [exportRange, setExportRange] = useState<ExportRange>('all')
+  const [exportSort, setExportSort] = useState<ExportSort>('desc')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
@@ -278,10 +301,12 @@ export function Settings() {
     setExportLoading(true)
     try {
       const raw = await usersApi.exportData()
-      const filteredEntries =
+      let filteredEntries =
         exportRange === 'dateRange' && startDate && endDate
           ? filterByDateRange(raw.entries ?? [], startDate, endDate)
           : (raw.entries ?? [])
+      // 백엔드는 항상 desc(최신순) 반환 — asc 선택 시 뒤집기
+      if (exportSort === 'asc') filteredEntries = [...filteredEntries].reverse()
       const exportData = { ...raw, entries: filteredEntries }
 
       const dateTag = new Date().toISOString().split('T')[0]
@@ -547,6 +572,30 @@ export function Settings() {
                   className={clsx(
                     'px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all',
                     exportRange === opt.value
+                      ? 'border-primary-400 bg-primary-50 text-primary-600'
+                      : 'border-transparent bg-gray-50 text-gray-500 hover:border-gray-200',
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sort order */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-gray-500">순서</p>
+            <div className="flex gap-2">
+              {[
+                { value: 'desc' as ExportSort, label: '최신순' },
+                { value: 'asc' as ExportSort, label: '오래된순' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setExportSort(opt.value)}
+                  className={clsx(
+                    'px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all',
+                    exportSort === opt.value
                       ? 'border-primary-400 bg-primary-50 text-primary-600'
                       : 'border-transparent bg-gray-50 text-gray-500 hover:border-gray-200',
                   )}
