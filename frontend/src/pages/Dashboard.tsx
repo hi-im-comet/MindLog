@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
@@ -76,6 +76,17 @@ export function Dashboard() {
   const streakDays = user?.profile?.consecutive_days ?? 0
   const navigate = useNavigate()
 
+  const [searchQ, setSearchQ] = useState('')
+  const [debouncedQ, setDebouncedQ] = useState('')
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleSearchChange = (value: string) => {
+    setSearchQ(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => setDebouncedQ(value.trim()), 400)
+  }
+
   // 대시보드 진입 시마다 프로필 새로고침 → 스트릭 최신화
   useEffect(() => {
     usersApi.getMe().then((fresh) => {
@@ -86,8 +97,13 @@ export function Dashboard() {
   const todayLabel = format(new Date(), 'M월 d일', { locale: ko })
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
-    queryKey: ['entries'],
-    queryFn: ({ pageParam = 1 }) => entriesApi.list({ page: pageParam as number, limit: 10 }),
+    queryKey: ['entries', debouncedQ, showFavoritesOnly],
+    queryFn: ({ pageParam = 1 }) => entriesApi.list({
+      page: pageParam as number,
+      limit: 10,
+      q: debouncedQ || undefined,
+      is_favorite: showFavoritesOnly || undefined,
+    }),
     getNextPageParam: (last, pages) =>
       last.pagination.page < last.pagination.total_pages ? pages.length + 1 : undefined,
     initialPageParam: 1,
@@ -169,18 +185,58 @@ export function Dashboard() {
         {/* Calendar */}
         <CalendarView />
 
+        {/* Search + filter */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-sm">🔍</span>
+              <input
+                type="text"
+                value={searchQ}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="일기 검색..."
+                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-primary-300 focus:ring-2 focus:ring-primary-100 bg-white"
+              />
+              {searchQ && (
+                <button
+                  onClick={() => { setSearchQ(''); setDebouncedQ('') }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => setShowFavoritesOnly((v) => !v)}
+              className={clsx(
+                'px-3 py-2 rounded-xl text-sm border transition-all whitespace-nowrap',
+                showFavoritesOnly
+                  ? 'border-amber-300 bg-amber-50 text-amber-600'
+                  : 'border-gray-200 text-gray-400 hover:border-gray-300'
+              )}
+              title="즐겨찾기만 보기"
+            >
+              {showFavoritesOnly ? '⭐ 즐겨찾기' : '☆ 즐겨찾기'}
+            </button>
+          </div>
+        </div>
+
         {/* Recent entries */}
         <div className="space-y-3">
-          <h3 className="font-semibold text-gray-700">최근 대화</h3>
+          <h3 className="font-semibold text-gray-700">
+            {debouncedQ ? `"${debouncedQ}" 검색 결과` : showFavoritesOnly ? '즐겨찾기' : '최근 대화'}
+          </h3>
           {allEntries.length === 0 ? (
             <div className="card p-8 text-center text-gray-400">
-              <p className="text-3xl mb-2">💬</p>
-              <p className="text-sm">아직 대화가 없어요</p>
+              <p className="text-3xl mb-2">{debouncedQ || showFavoritesOnly ? '🔍' : '💬'}</p>
+              <p className="text-sm">
+                {debouncedQ ? '검색 결과가 없어요' : showFavoritesOnly ? '즐겨찾기한 일기가 없어요' : '아직 대화가 없어요'}
+              </p>
             </div>
           ) : (
             <>
               {allEntries
-                .filter((e) => e.entry_date !== today)
+                .filter((e) => debouncedQ || showFavoritesOnly ? true : e.entry_date !== today)
                 .map((entry) => (
                   <EntryPreviewCard key={entry.id} entry={entry} />
                 ))}

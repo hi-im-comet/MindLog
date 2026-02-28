@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { JournalEntry } from '@/types/entry'
-import { clsx } from 'clsx'
+import { entriesApi } from '@/api/entries'
 
 const MOOD_EMOJI: Record<number, string> = {
   1: '😭', 2: '😢', 3: '😟', 4: '😕', 5: '😐',
@@ -15,15 +16,23 @@ interface Props {
 
 export function EntryPreviewCard({ entry }: Props) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const dateLabel = format(new Date(entry.entry_date + 'T00:00:00'), 'M월 d일 EEEE', { locale: ko })
 
+  const favMutation = useMutation({
+    mutationFn: () => entriesApi.toggleFavorite(entry.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entries'] })
+    },
+  })
+
   return (
-    <button
-      onClick={() => navigate(entry.is_draft ? `/entry/${entry.entry_date}` : `/view/${entry.id}`)}
-      className="card p-4 w-full text-left hover:shadow-md transition-shadow duration-150"
-    >
+    <div className="card p-4 w-full text-left hover:shadow-md transition-shadow duration-150">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
+        <button
+          className="flex-1 min-w-0 text-left"
+          onClick={() => navigate(entry.is_draft ? `/entry/${entry.entry_date}` : `/view/${entry.id}`)}
+        >
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-xs text-gray-400">{dateLabel}</span>
             {entry.is_draft && (
@@ -44,8 +53,21 @@ export function EntryPreviewCard({ entry }: Props) {
             <p className="text-sm text-gray-500 line-clamp-2">{entry.raw_content}</p>
           )}
 
-          {entry.categories.length > 0 && (
+          {entry.tags && entry.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
+              {entry.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="text-xs text-primary-600 bg-primary-50 rounded-full px-2 py-0.5"
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {entry.categories.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
               {entry.categories.slice(0, 3).map((cat) => (
                 <span
                   key={cat.id}
@@ -56,7 +78,7 @@ export function EntryPreviewCard({ entry }: Props) {
               ))}
             </div>
           )}
-        </div>
+        </button>
 
         <div className="flex flex-col items-end gap-2 shrink-0">
           {entry.mood_score && (
@@ -67,8 +89,19 @@ export function EntryPreviewCard({ entry }: Props) {
           {entry.has_conversation && (
             <span className="text-xs text-primary-400">💬</span>
           )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              favMutation.mutate()
+            }}
+            disabled={favMutation.isPending}
+            className="text-base transition-colors disabled:opacity-50"
+            title={entry.is_favorite ? '즐겨찾기 해제' : '즐겨찾기'}
+          >
+            {entry.is_favorite ? '⭐' : '☆'}
+          </button>
         </div>
       </div>
-    </button>
+    </div>
   )
 }

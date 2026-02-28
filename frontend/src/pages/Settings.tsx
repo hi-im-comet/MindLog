@@ -131,6 +131,29 @@ export function Settings() {
 
   const lockEnabled = user?.profile?.entry_lock_enabled ?? false
   const hasLockPassword = user?.profile?.has_lock_password ?? false
+  const autoLockEnabled = user?.profile?.auto_lock_enabled ?? false
+  const autoLockTimeout = user?.profile?.auto_lock_timeout ?? 30
+  const [autoLockSaving, setAutoLockSaving] = useState(false)
+
+  const handleAutoLockToggle = async () => {
+    setAutoLockSaving(true)
+    try {
+      const updated = await usersApi.updateMe({ auto_lock_enabled: !autoLockEnabled })
+      updateUser(updated)
+    } catch { /* ignore */ } finally {
+      setAutoLockSaving(false)
+    }
+  }
+
+  const handleAutoLockTimeout = async (minutes: number) => {
+    setAutoLockSaving(true)
+    try {
+      const updated = await usersApi.updateMe({ auto_lock_timeout: minutes })
+      updateUser(updated)
+    } catch { /* ignore */ } finally {
+      setAutoLockSaving(false)
+    }
+  }
 
   const openLockModal = (modal: LockModal) => {
     setLockCurrentPw('')
@@ -142,48 +165,62 @@ export function Settings() {
   }
 
   const handleSetupLock = async () => {
-    if (lockNewPw.length < 4) { setLockError('비밀번호는 4자 이상이어야 해요.'); return }
-    if (lockNewPw !== lockNewPwConfirm) { setLockError('비밀번호가 일치하지 않아요.'); return }
+    const pw = lockNewPw.trim()
+    const pwConfirm = lockNewPwConfirm.trim()
+    if (pw.length < 4) { setLockError('비밀번호는 4자 이상이어야 해요.'); return }
+    if (pw !== pwConfirm) { setLockError('비밀번호가 일치하지 않아요.'); return }
     setLockLoading(true)
     setLockError('')
     try {
-      const updated = await usersApi.setupLock(lockNewPw)
+      const updated = await usersApi.setupLock(pw)
       updateUser(updated)
       setLockModal(null)
-    } catch {
-      setLockError('설정에 실패했어요. 다시 시도해주세요.')
+    } catch (e: any) {
+      setLockError(e?.response?.data?.error || '설정에 실패했어요. 다시 시도해주세요.')
     } finally {
       setLockLoading(false)
     }
   }
 
   const handleDisableLock = async () => {
-    if (!lockCurrentPw) { setLockError('현재 비밀번호를 입력해주세요.'); return }
+    const pw = lockCurrentPw.trim()
+    if (!pw) { setLockError('현재 비밀번호를 입력해주세요.'); return }
     setLockLoading(true)
     setLockError('')
     try {
-      const updated = await usersApi.disableLock(lockCurrentPw, clearEntriesOnDisable)
+      const updated = await usersApi.disableLock(pw, clearEntriesOnDisable)
       updateUser(updated)
       setLockModal(null)
     } catch (e: any) {
-      setLockError(e?.response?.status === 401 ? '비밀번호가 일치하지 않아요.' : '해제에 실패했어요. 다시 시도해주세요.')
+      setLockError(
+        e?.response?.status === 401
+          ? '비밀번호가 일치하지 않아요.'
+          : (e?.response?.data?.error || '해제에 실패했어요. 다시 시도해주세요.')
+      )
     } finally {
       setLockLoading(false)
     }
   }
 
   const handleChangeLockPassword = async () => {
-    if (hasLockPassword && !lockCurrentPw) { setLockError('현재 비밀번호를 입력해주세요.'); return }
-    if (lockNewPw.length < 4) { setLockError('새 비밀번호는 4자 이상이어야 해요.'); return }
-    if (lockNewPw !== lockNewPwConfirm) { setLockError('비밀번호가 일치하지 않아요.'); return }
+    const currentPw = lockCurrentPw.trim()
+    const newPw = lockNewPw.trim()
+    const newPwConfirm = lockNewPwConfirm.trim()
+    if (hasLockPassword && !currentPw) { setLockError('현재 비밀번호를 입력해주세요.'); return }
+    if (newPw.length < 4) { setLockError('새 비밀번호는 4자 이상이어야 해요.'); return }
+    if (newPw !== newPwConfirm) { setLockError('비밀번호가 일치하지 않아요.'); return }
     setLockLoading(true)
     setLockError('')
     try {
-      const updated = await usersApi.changeLockPassword(lockCurrentPw, lockNewPw)
+      const updated = await usersApi.changeLockPassword(currentPw, newPw)
       updateUser(updated)
       setLockModal(null)
     } catch (e: any) {
-      setLockError(e?.response?.status === 401 ? '현재 비밀번호가 일치하지 않아요.' : '변경에 실패했어요. 다시 시도해주세요.')
+      setLockError(
+        e?.response?.status === 401
+          ? '현재 비밀번호가 일치하지 않아요.'
+          : (e?.response?.data?.error || '변경에 실패했어요. 다시 시도해주세요.')
+      )
     } finally {
       setLockLoading(false)
     }
@@ -394,6 +431,63 @@ export function Settings() {
             </motion.div>
           )}
         </div>
+
+        {/* 자동 잠금 — 잠금이 켜져 있고 비밀번호가 설정된 경우만 표시 */}
+        {lockEnabled && hasLockPassword && (
+          <div className="card p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <h2 className="text-sm font-semibold text-gray-700">자동 잠금</h2>
+                <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
+                  탭을 떠나거나 화면이 꺼진 후 일정 시간이 지나면 잠금이 다시 걸려요.
+                </p>
+              </div>
+              <button
+                onClick={handleAutoLockToggle}
+                disabled={autoLockSaving}
+                className={clsx(
+                  'ml-4 relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-60',
+                  autoLockEnabled ? 'bg-primary-500' : 'bg-gray-200'
+                )}
+                role="switch"
+                aria-checked={autoLockEnabled}
+              >
+                <span
+                  className={clsx(
+                    'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200',
+                    autoLockEnabled ? 'translate-x-5' : 'translate-x-0'
+                  )}
+                />
+              </button>
+            </div>
+            {autoLockEnabled && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-1.5"
+              >
+                <p className="text-xs font-medium text-gray-500">잠금까지 대기 시간</p>
+                <div className="flex gap-2 flex-wrap">
+                  {[1, 5, 15, 30, 60].map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => handleAutoLockTimeout(m)}
+                      disabled={autoLockSaving}
+                      className={clsx(
+                        'px-3 py-1.5 rounded-lg text-xs font-medium border transition-all',
+                        autoLockTimeout === m
+                          ? 'border-primary-400 bg-primary-50 text-primary-600'
+                          : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                      )}
+                    >
+                      {m < 60 ? `${m}분` : '1시간'}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </div>
+        )}
 
         {/* Data export */}
         <div className="card p-6 space-y-4">

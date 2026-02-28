@@ -8,6 +8,8 @@ export const entriesApi = {
     limit?: number
     start_date?: string
     end_date?: string
+    q?: string
+    is_favorite?: boolean
   }): Promise<{ entries: JournalEntry[]; pagination: { page: number; total: number; total_pages: number } }> => {
     const res = await apiClient.get<ApiResponse<any>>('/api/entries', { params })
     return res.data.data!
@@ -63,6 +65,11 @@ export const entriesApi = {
 
   unlockEntry: async (id: string): Promise<JournalEntry> => {
     const res = await apiClient.post<ApiResponse<{ entry: JournalEntry }>>(`/api/entries/${id}/unlock`)
+    return res.data.data!.entry
+  },
+
+  toggleFavorite: async (id: string): Promise<JournalEntry> => {
+    const res = await apiClient.post<ApiResponse<{ entry: JournalEntry }>>(`/api/entries/${id}/favorite`)
     return res.data.data!.entry
   },
 }

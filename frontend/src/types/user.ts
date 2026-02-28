@@ -9,6 +9,8 @@ export interface UserProfile {
   consecutive_days: number
   entry_lock_enabled: boolean
   has_lock_password: boolean
+  auto_lock_enabled: boolean
+  auto_lock_timeout: number
   last_analysis_at: string | null
 }
 

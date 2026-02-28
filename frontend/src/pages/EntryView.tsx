@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
@@ -8,6 +8,7 @@ import { Layout } from '@/components/shared/Layout'
 import { entriesApi } from '@/api/entries'
 import { usersApi } from '@/api/users'
 import { useAuthStore } from '@/store/authStore'
+import { useAutoLock } from '@/hooks/useAutoLock'
 import { iwa } from '@/utils/josa'
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -19,29 +20,60 @@ const CATEGORY_ICONS: Record<string, string> = {
   관계: '👥',
 }
 
-// ── 비밀번호 입력 오버레이 (전역 비번으로 열람 허가) ──────────────────────
+// ── 비밀번호 입력 오버레이 ────────────────────────────────────────────────────
 function LockVerifyOverlay({ onVerified }: { onVerified: () => void }) {
   const [pw, setPw] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null)
+  const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const startCooldown = (seconds: number) => {
+    setCooldownSeconds(seconds)
+    if (cooldownRef.current) clearInterval(cooldownRef.current)
+    cooldownRef.current = setInterval(() => {
+      setCooldownSeconds((s) => {
+        if (s <= 1) {
+          clearInterval(cooldownRef.current!)
+          setRemainingAttempts(null)
+          return 0
+        }
+        return s - 1
+      })
+    }, 1000)
+  }
+
+  useEffect(() => () => { if (cooldownRef.current) clearInterval(cooldownRef.current) }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!pw) return
+    if (!pw || cooldownSeconds > 0) return
     setLoading(true)
     setError('')
     try {
       await usersApi.verifyLock(pw)
       onVerified()
-    } catch {
-      setError('비밀번호가 일치하지 않아요.')
+    } catch (err: any) {
+      const data = err?.response?.data
+      const status = err?.response?.status
+      if (status === 429 && data?.errors?.retry_after) {
+        startCooldown(data.errors.retry_after)
+        setError(`너무 많이 시도했어요. ${data.errors.retry_after}초 후 다시 시도해 주세요.`)
+      } else {
+        const remaining = data?.errors?.remaining_attempts
+        if (typeof remaining === 'number') setRemainingAttempts(remaining)
+        setError('비밀번호가 일치하지 않아요.')
+      }
       setPw('')
       setTimeout(() => inputRef.current?.focus(), 50)
     } finally {
       setLoading(false)
     }
   }
+
+  const isLocked = cooldownSeconds > 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm">
@@ -51,7 +83,7 @@ function LockVerifyOverlay({ onVerified }: { onVerified: () => void }) {
         className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm mx-4"
       >
         <div className="text-center mb-6">
-          <span className="text-4xl">🔒</span>
+          <span className="text-4xl">{isLocked ? '⏳' : '🔒'}</span>
           <h3 className="text-lg font-bold text-gray-800 mt-3">잠긴 일기예요</h3>
           <p className="text-sm text-gray-500 mt-1">잠금 비밀번호를 입력하면 볼 수 있어요</p>
         </div>
@@ -60,18 +92,31 @@ function LockVerifyOverlay({ onVerified }: { onVerified: () => void }) {
             ref={inputRef}
             type="password"
             value={pw}
-            onChange={(e) => setPw(e.target.value)}
+            onChange={(e) => { setPw(e.target.value); setError('') }}
             placeholder="비밀번호"
             autoFocus
-            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary-300 focus:ring-2 focus:ring-primary-100"
+            disabled={isLocked}
+            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary-300 focus:ring-2 focus:ring-primary-100 disabled:bg-gray-50 disabled:text-gray-400"
           />
-          {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+          {error && (
+            <p className="text-xs text-red-500 text-center">{error}</p>
+          )}
+          {isLocked && (
+            <p className="text-xs text-center text-amber-600 font-medium">
+              {cooldownSeconds}초 후 다시 시도할 수 있어요
+            </p>
+          )}
+          {!isLocked && remainingAttempts !== null && remainingAttempts > 0 && (
+            <p className="text-xs text-center text-orange-500">
+              남은 시도 횟수: {remainingAttempts}회
+            </p>
+          )}
           <button
             type="submit"
-            disabled={loading || !pw}
+            disabled={loading || !pw || isLocked}
             className="w-full bg-primary-500 text-white py-3 rounded-xl text-sm font-medium hover:bg-primary-600 disabled:opacity-50 transition-colors"
           >
-            {loading ? '확인 중...' : '확인'}
+            {loading ? '확인 중...' : isLocked ? `${cooldownSeconds}초 대기` : '확인'}
           </button>
         </form>
       </motion.div>
@@ -79,7 +124,69 @@ function LockVerifyOverlay({ onVerified }: { onVerified: () => void }) {
   )
 }
 
-// ── 메인 EntryView ────────────────────────────────────────────
+// ── 태그 입력 컴포넌트 ────────────────────────────────────────────────────────
+function TagEditor({ tags, onSave }: { tags: string[]; onSave: (tags: string[]) => void }) {
+  const [input, setInput] = useState('')
+  const [localTags, setLocalTags] = useState(tags)
+
+  const addTag = () => {
+    const t = input.trim().replace(/^#/, '')
+    if (!t || localTags.includes(t) || localTags.length >= 10) return
+    const next = [...localTags, t]
+    setLocalTags(next)
+    setInput('')
+    onSave(next)
+  }
+
+  const removeTag = (tag: string) => {
+    const next = localTags.filter((t) => t !== tag)
+    setLocalTags(next)
+    onSave(next)
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {localTags.map((tag) => (
+          <span
+            key={tag}
+            className="inline-flex items-center gap-1 text-xs text-primary-600 bg-primary-50 rounded-full px-2.5 py-1"
+          >
+            #{tag}
+            <button
+              onClick={() => removeTag(tag)}
+              className="text-primary-400 hover:text-primary-700 leading-none"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); addTag() }
+          }}
+          placeholder="태그 추가 (Enter)"
+          maxLength={30}
+          className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-primary-300"
+        />
+        <button
+          onClick={addTag}
+          disabled={!input.trim()}
+          className="text-xs text-primary-600 border border-primary-200 rounded-lg px-3 py-1.5 hover:bg-primary-50 disabled:opacity-40"
+        >
+          추가
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── 메인 EntryView ────────────────────────────────────────────────────────────
 export function EntryView() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -88,10 +195,18 @@ export function EntryView() {
   const aiName = user?.profile?.ai_name
   const lockEnabled = user?.profile?.entry_lock_enabled ?? false
   const hasLockPassword = user?.profile?.has_lock_password ?? false
+  const autoLockEnabled = user?.profile?.auto_lock_enabled ?? false
+  const autoLockTimeout = user?.profile?.auto_lock_timeout ?? 30
 
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isUnlocked, setIsUnlocked] = useState(false)
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false)
+  const [showTagEditor, setShowTagEditor] = useState(false)
+
+  // 자동 잠금: 잠긴 일기를 이미 비번으로 열었을 때만 적용
+  const shouldAutoLock = lockEnabled && hasLockPassword && isUnlocked && autoLockEnabled
+  const handleAutoLock = useCallback(() => setIsUnlocked(false), [])
+  useAutoLock({ enabled: shouldAutoLock, timeoutMinutes: autoLockTimeout, onLock: handleAutoLock })
 
   const { data: entry, isLoading } = useQuery({
     queryKey: ['entry', id],
@@ -127,6 +242,19 @@ export function EntryView() {
     },
   })
 
+  const favMutation = useMutation({
+    mutationFn: () => entriesApi.toggleFavorite(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entry', id] })
+      queryClient.invalidateQueries({ queryKey: ['entries'] })
+    },
+  })
+
+  const tagMutation = useMutation({
+    mutationFn: (tags: string[]) => entriesApi.update(id!, { tags }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['entry', id] }),
+  })
+
   if (isLoading) {
     return (
       <Layout>
@@ -156,7 +284,6 @@ export function EntryView() {
     { locale: ko }
   )
   const hasSegments = entry.category_segments && entry.category_segments.length > 0
-  // 비밀번호가 설정되지 않았으면 잠금 오버레이 표시 안 함
   const needsVerification = entry.is_locked && hasLockPassword && !isUnlocked
 
   return (
@@ -230,6 +357,16 @@ export function EntryView() {
               )}
             </div>
 
+            {/* 즐겨찾기 버튼 */}
+            <button
+              onClick={() => favMutation.mutate()}
+              disabled={favMutation.isPending}
+              className="text-lg p-1 transition-colors disabled:opacity-50"
+              title={entry.is_favorite ? '즐겨찾기 해제' : '즐겨찾기'}
+            >
+              {entry.is_favorite ? '⭐' : '☆'}
+            </button>
+
             {/* 잠금 버튼 — 전역 잠금 + 비밀번호 설정 시만 표시 */}
             {lockEnabled && hasLockPassword && !entry.is_locked && (
               <button
@@ -285,6 +422,43 @@ export function EntryView() {
 
           {/* 본문 — 잠금 미인증 시 블러 */}
           <div className={needsVerification ? 'blur-sm pointer-events-none select-none' : ''}>
+            {/* 태그 */}
+            <div className="mb-4">
+              {entry.tags && entry.tags.length > 0 && !showTagEditor && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {entry.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="text-xs text-primary-600 bg-primary-50 rounded-full px-2.5 py-1"
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={() => setShowTagEditor((v) => !v)}
+                className="text-xs text-gray-400 hover:text-primary-500 transition-colors"
+              >
+                {showTagEditor ? '태그 닫기' : entry.tags?.length ? '태그 편집' : '+ 태그 추가'}
+              </button>
+              <AnimatePresence>
+                {showTagEditor && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden mt-2"
+                  >
+                    <TagEditor
+                      tags={entry.tags || []}
+                      onSave={(tags) => tagMutation.mutate(tags)}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             {/* 카테고리별 AI 분석 */}
             <AnimatePresence mode="wait">
               {hasSegments ? (

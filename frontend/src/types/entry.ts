@@ -16,6 +16,8 @@ export interface JournalEntry {
   daily_summary: string | null
   is_draft: boolean
   is_locked: boolean
+  is_favorite: boolean
+  tags: string[]
   categories: JournalCategory[]
   category_segments?: CategorySegment[]
   has_conversation: boolean
@@ -30,6 +32,8 @@ export interface CalendarDay {
   mood_score?: number | null
   summary?: string | null
   is_draft?: boolean
+  is_locked?: boolean
+  is_favorite?: boolean
 }
 
 export interface EntryCreateInput {
@@ -49,4 +53,6 @@ export interface EntryUpdateInput {
   energy_score?: number | null
   category_ids?: string[]
   is_draft?: boolean
+  is_favorite?: boolean
+  tags?: string[]
 }

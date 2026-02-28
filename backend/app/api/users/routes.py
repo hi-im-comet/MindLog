@@ -2,7 +2,7 @@ from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from marshmallow import Schema, fields, validate, ValidationError
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from app.extensions import db
 from app.models.user import User
@@ -23,10 +23,16 @@ class OnboardingSchema(Schema):
     )
 
 
+FAILED_LOCK_MAX = 5
+FAILED_LOCK_COOLDOWN = 30  # seconds
+
+
 class UserUpdateSchema(Schema):
     display_name = fields.String(validate=validate.Length(min=1, max=100))
     timezone = fields.String(validate=validate.Length(max=50))
     ai_name = fields.String(allow_none=True, validate=validate.Length(max=50))
+    auto_lock_enabled = fields.Boolean()
+    auto_lock_timeout = fields.Integer(validate=validate.Range(min=1, max=120))
     # entry_lock_enabled은 setup-lock / disable-lock 전용 엔드포인트로만 변경 가능
 
 
@@ -64,16 +70,22 @@ def update_me():
 
     # 프로필 전용 필드 분리
     ai_name = data.pop('ai_name', ...)  # ... = field not provided
+    auto_lock_enabled = data.pop('auto_lock_enabled', ...)
+    auto_lock_timeout = data.pop('auto_lock_timeout', ...)
 
     for key, value in data.items():
         setattr(user, key, value)
 
+    if not user.profile:
+        user.profile = UserProfile(user_id=user_id)
+        db.session.add(user.profile)
+
     if ai_name is not ...:
-        if user.profile:
-            user.profile.ai_name = ai_name or None
-        else:
-            profile = UserProfile(user_id=user_id, ai_name=ai_name or None)
-            db.session.add(profile)
+        user.profile.ai_name = ai_name or None
+    if auto_lock_enabled is not ...:
+        user.profile.auto_lock_enabled = auto_lock_enabled
+    if auto_lock_timeout is not ...:
+        user.profile.auto_lock_timeout = auto_lock_timeout
 
     db.session.commit()
     return api_response({'user': user.to_dict(include_profile=True)})
@@ -208,7 +220,7 @@ def change_lock_password():
 @users_bp.route('/me/verify-lock', methods=['POST'])
 @jwt_required()
 def verify_lock():
-    """전역 잠금 비밀번호 검증 (잠긴 일기 열람 시)."""
+    """전역 잠금 비밀번호 검증 (잠긴 일기 열람 시). 5회 실패 시 30초 쿨다운."""
     user_id = get_jwt_identity()
     user = User.query.filter_by(id=user_id, deleted_at=None).first_or_404()
     body = request.get_json(silent=True) or {}
@@ -220,10 +232,35 @@ def verify_lock():
     if not user.profile.lock_password_hash:
         return api_error('설정된 비밀번호가 없어요.', 400)
 
-    verified = check_password_hash(user.profile.lock_password_hash, password)
-    if not verified:
-        return api_error('비밀번호가 일치하지 않아요.', 401)
+    profile = user.profile
+    now = datetime.now(timezone.utc)
 
+    # 쿨다운 중인지 확인
+    if profile.failed_lock_attempts >= FAILED_LOCK_MAX and profile.failed_lock_at:
+        cooldown_until = profile.failed_lock_at + timedelta(seconds=FAILED_LOCK_COOLDOWN)
+        if now < cooldown_until:
+            retry_after = int((cooldown_until - now).total_seconds())
+            return api_error('너무 많이 시도했어요. 잠시 후 다시 시도해 주세요.', 429,
+                             {'retry_after': retry_after})
+        else:
+            # 쿨다운 종료 → 카운터 리셋
+            profile.failed_lock_attempts = 0
+            profile.failed_lock_at = None
+
+    verified = check_password_hash(profile.lock_password_hash, password)
+    if not verified:
+        profile.failed_lock_attempts = (profile.failed_lock_attempts or 0) + 1
+        if profile.failed_lock_attempts >= FAILED_LOCK_MAX:
+            profile.failed_lock_at = now
+        db.session.commit()
+        remaining = max(0, FAILED_LOCK_MAX - profile.failed_lock_attempts)
+        return api_error('비밀번호가 일치하지 않아요.', 401,
+                         {'remaining_attempts': remaining})
+
+    # 성공 → 카운터 리셋
+    profile.failed_lock_attempts = 0
+    profile.failed_lock_at = None
+    db.session.commit()
     return api_response({'verified': True})
 
 

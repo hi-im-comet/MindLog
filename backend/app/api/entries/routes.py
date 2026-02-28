@@ -143,6 +143,8 @@ class EntryUpdateSchema(Schema):
     energy_score = fields.Integer(allow_none=True, validate=validate.Range(min=1, max=10))
     category_ids = fields.List(fields.UUID())
     is_draft = fields.Boolean()
+    is_favorite = fields.Boolean()
+    tags = fields.List(fields.String(validate=validate.Length(max=30)), validate=validate.Length(max=10))
 
 
 create_schema = EntryCreateSchema()
@@ -170,6 +172,8 @@ def list_entries():
     limit = min(request.args.get('limit', 20, type=int), 100)
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
+    q = request.args.get('q', '').strip()
+    is_favorite = request.args.get('is_favorite')
 
     query = (JournalEntry.query
              .filter_by(user_id=user_id, is_draft=False)
@@ -180,6 +184,16 @@ def list_entries():
         query = query.filter(JournalEntry.entry_date >= start_date)
     if end_date:
         query = query.filter(JournalEntry.entry_date <= end_date)
+    if q:
+        like = f'%{q}%'
+        query = query.filter(
+            db.or_(
+                JournalEntry.raw_content.ilike(like),
+                JournalEntry.title.ilike(like),
+            )
+        )
+    if is_favorite == 'true':
+        query = query.filter(JournalEntry.is_favorite == True)
 
     paginated = query.paginate(page=page, per_page=limit, error_out=False)
 
@@ -242,6 +256,8 @@ def calendar_view():
                 'mood_score': e.mood_score,
                 'summary': e.daily_summary,
                 'is_draft': e.is_draft,
+                'is_locked': e.is_locked or False,
+                'is_favorite': e.is_favorite or False,
             })
         else:
             days.append({'date': key, 'has_entry': False})
@@ -387,6 +403,20 @@ def unlock_entry(entry_id):
     entry.is_locked = False
     db.session.commit()
     return api_response({'entry': entry.to_dict()}, message='잠금이 해제되었습니다.')
+
+
+@entries_bp.route('/<uuid:entry_id>/favorite', methods=['POST'])
+@jwt_required()
+def toggle_favorite(entry_id):
+    """즐겨찾기 토글."""
+    user_id = get_jwt_identity()
+    entry = (JournalEntry.query
+             .filter_by(id=entry_id, user_id=user_id)
+             .filter(JournalEntry.deleted_at.is_(None))
+             .first_or_404())
+    entry.is_favorite = not (entry.is_favorite or False)
+    db.session.commit()
+    return api_response({'entry': entry.to_dict(), 'is_favorite': entry.is_favorite})
 
 
 @entries_bp.route('/<uuid:entry_id>', methods=['DELETE'])
