@@ -1,0 +1,21 @@
+{
+  "name": "MindLog",
+  "short_name": "MindLog",
+  "description": "당신의 하루를 기록하고 AI와 대화하세요",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#7c3aed",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

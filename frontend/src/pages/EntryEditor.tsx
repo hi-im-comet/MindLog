@@ -9,10 +9,13 @@ import { useAutoSave } from '@/hooks/useAutoSave'
 import { entriesApi } from '@/api/entries'
 import { conversationsApi } from '@/api/conversations'
 import { usersApi } from '@/api/users'
+import { remindersApi } from '@/api/reminders'
 import { useAuthStore } from '@/store/authStore'
 import { CrisisResourceBanner } from '@/components/conversation/CrisisResourceBanner'
+import { ReminderCreateModal } from '@/components/reminders/ReminderCreateModal'
 import { MOOD_OPTIONS, LENGTH_OPTIONS } from '@/constants/aiMood'
 import type { Conversation, ConversationMessage, ResponseMode } from '@/types/conversation'
+import type { ExtractedTask } from '@/types/reminder'
 
 export function EntryEditor() {
   const { date: dateParam } = useParams<{ date?: string }>()
@@ -44,6 +47,12 @@ export function EntryEditor() {
   const [hasCrisis, setHasCrisis] = useState(false)
   const [crisisDismissed, setCrisisDismissed] = useState(false)
   const lastCrisisRef = useRef(false)
+
+  // NLP 태스크 제안 배너
+  const [suggestedTasks, setSuggestedTasks] = useState<ExtractedTask[]>([])
+  const [nlpBannerDismissed, setNlpBannerDismissed] = useState(false)
+  const [createReminderTask, setCreateReminderTask] = useState<ExtractedTask | null>(null)
+  const nlpTriggeredRef = useRef(false)
 
   // 사용자 메시지 누적 (raw_content 동기화용)
   const userMessagesRef = useRef<string[]>([])
@@ -150,11 +159,23 @@ export function EntryEditor() {
         setStreamingContent('')
         setMessages((prev) => {
           const withoutOpt = prev.filter((m) => !m.id.startsWith('opt-'))
-          return [
+          const updated = [
             ...withoutOpt,
             { ...optimisticMsg, crisis_flag: lastCrisisRef.current },
             event.message,
           ]
+          // 3번째 사용자 메시지 이후 NLP 추출 (1회만)
+          const userCount = updated.filter((m) => m.role === 'user').length
+          if (userCount >= 3 && !nlpTriggeredRef.current && entryId) {
+            nlpTriggeredRef.current = true
+            remindersApi.extractTasks(entryId).then((tasks) => {
+              if (tasks.length > 0) {
+                setSuggestedTasks(tasks)
+                setNlpBannerDismissed(false)
+              }
+            }).catch(() => {})
+          }
+          return updated
         })
         setIsSending(false)
       },
@@ -237,6 +258,7 @@ export function EntryEditor() {
   }
 
   return (
+    <>
     <Layout>
       <div className="max-w-2xl mx-auto flex flex-col" style={{ height: 'calc(100vh - 8rem)' }}>
         {/* Header */}
@@ -311,6 +333,36 @@ export function EntryEditor() {
           </div>
         )}
 
+        {/* NLP 태스크 제안 배너 */}
+        {suggestedTasks.length > 0 && !nlpBannerDismissed && (
+          <div className="pt-1 flex-shrink-0">
+            <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs font-medium text-amber-700">💡 이런 할 일이 있으신가요?</p>
+                <button
+                  onClick={() => setNlpBannerDismissed(true)}
+                  className="text-amber-400 hover:text-amber-600 text-xs flex-shrink-0"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="mt-2 space-y-1.5">
+                {suggestedTasks.map((task, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-amber-800 flex-1 truncate">• {task.title}</p>
+                    <button
+                      onClick={() => setCreateReminderTask(task)}
+                      className="text-xs text-amber-600 font-medium hover:underline flex-shrink-0"
+                    >
+                      추가
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Messages */}
         <div className="flex-1 overflow-y-auto py-4 space-y-3 min-h-0">
           {messages.map((msg) => (
@@ -375,6 +427,15 @@ export function EntryEditor() {
         </div>
       </div>
     </Layout>
+
+      {createReminderTask && entryId && (
+        <ReminderCreateModal
+          initialTitle={createReminderTask.title}
+          sourceEntryId={entryId}
+          onClose={() => setCreateReminderTask(null)}
+        />
+      )}
+    </>
   )
 }
 

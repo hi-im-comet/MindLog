@@ -14,6 +14,9 @@ export interface UserProfile {
   last_analysis_at: string | null
   ai_mood_default: string
   ai_response_length_default: string
+  reminders_enabled: boolean
+  quiet_hours_start: number | null
+  quiet_hours_end: number | null
 }
 
 export interface User {

@@ -29,6 +29,7 @@ export function Layout({ children }: Props) {
       matchPrefix: '/entry',
     },
     { label: '인사이트', icon: '📊', getTo: () => '/insights', matchPrefix: '/insights' },
+    { label: '알림', icon: '🔔', getTo: () => '/reminders', matchPrefix: '/reminders' },
   ]
   const navigate = useNavigate()
   const location = useLocation()

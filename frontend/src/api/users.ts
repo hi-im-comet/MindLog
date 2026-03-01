@@ -9,6 +9,9 @@ export interface UpdateMePayload {
   auto_lock_timeout?: number
   ai_mood_default?: string
   ai_response_length_default?: string
+  reminders_enabled?: boolean
+  quiet_hours_start?: number | null
+  quiet_hours_end?: number | null
 }
 
 export const usersApi = {

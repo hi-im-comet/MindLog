@@ -33,6 +33,10 @@ class User(db.Model):
                                     cascade='all, delete-orphan')
     refresh_tokens = db.relationship('RefreshToken', back_populates='user',
                                       cascade='all, delete-orphan')
+    check_ins = db.relationship('CheckIn', backref='user', lazy='dynamic',
+                                cascade='all, delete-orphan')
+    push_subscriptions = db.relationship('PushSubscription', backref='user', lazy='dynamic',
+                                         cascade='all, delete-orphan')
 
     def to_dict(self, include_profile=False):
         data = {

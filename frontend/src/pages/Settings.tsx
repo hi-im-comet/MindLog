@@ -158,6 +158,11 @@ export function Settings() {
   const autoLockTimeout = user?.profile?.auto_lock_timeout ?? 30
   const [autoLockSaving, setAutoLockSaving] = useState(false)
   const [moodSaving, setMoodSaving] = useState(false)
+  const [reminderSaving, setReminderSaving] = useState(false)
+
+  const remindersEnabled = user?.profile?.reminders_enabled ?? true
+  const quietHoursStart = user?.profile?.quiet_hours_start ?? null
+  const quietHoursEnd = user?.profile?.quiet_hours_end ?? null
 
   const currentMood = user?.profile?.ai_mood_default || 'empathy'
   const currentLength = user?.profile?.ai_response_length_default || 'normal'
@@ -179,6 +184,30 @@ export function Settings() {
       updateUser(updated)
     } catch { /* ignore */ } finally {
       setMoodSaving(false)
+    }
+  }
+
+  const handleRemindersToggle = async () => {
+    setReminderSaving(true)
+    try {
+      const updated = await usersApi.updateMe({ reminders_enabled: !remindersEnabled })
+      updateUser(updated)
+      if (!remindersEnabled) {
+        // 알림을 켤 때 푸시 구독 초기화
+        import('@/api/push').then(({ initPushSubscription }) => initPushSubscription())
+      }
+    } catch { /* ignore */ } finally {
+      setReminderSaving(false)
+    }
+  }
+
+  const handleQuietHoursChange = async (start: number | null, end: number | null) => {
+    setReminderSaving(true)
+    try {
+      const updated = await usersApi.updateMe({ quiet_hours_start: start, quiet_hours_end: end } as any)
+      updateUser(updated)
+    } catch { /* ignore */ } finally {
+      setReminderSaving(false)
     }
   }
 
@@ -473,6 +502,87 @@ export function Settings() {
               ))}
             </div>
           </div>
+        </div>
+
+        {/* 체크인 알림 */}
+        <div className="card p-6 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700">체크인 알림</h2>
+            <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
+              할 일을 등록하면 AI가 설정한 시간에 먼저 말을 걸어요.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">알림 사용</p>
+            <button
+              onClick={handleRemindersToggle}
+              disabled={reminderSaving}
+              className={clsx(
+                'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-60',
+                remindersEnabled ? 'bg-primary-500' : 'bg-gray-200',
+              )}
+              role="switch"
+              aria-checked={remindersEnabled}
+            >
+              <span
+                className={clsx(
+                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200',
+                  remindersEnabled ? 'translate-x-5' : 'translate-x-0',
+                )}
+              />
+            </button>
+          </div>
+
+          {remindersEnabled && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-2"
+            >
+              <p className="text-xs font-medium text-gray-500">방해금지 시간대</p>
+              <p className="text-xs text-gray-400">이 시간대에는 알림을 보내지 않아요.</p>
+              <div className="flex items-center gap-2">
+                <select
+                  value={quietHoursStart ?? ''}
+                  onChange={(e) =>
+                    handleQuietHoursChange(
+                      e.target.value === '' ? null : Number(e.target.value),
+                      quietHoursEnd,
+                    )
+                  }
+                  disabled={reminderSaving}
+                  className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:border-primary-300 disabled:opacity-60"
+                >
+                  <option value="">설정 안 함</option>
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>
+                      {i}시
+                    </option>
+                  ))}
+                </select>
+                <span className="text-gray-400 text-sm">~</span>
+                <select
+                  value={quietHoursEnd ?? ''}
+                  onChange={(e) =>
+                    handleQuietHoursChange(
+                      quietHoursStart,
+                      e.target.value === '' ? null : Number(e.target.value),
+                    )
+                  }
+                  disabled={reminderSaving}
+                  className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:border-primary-300 disabled:opacity-60"
+                >
+                  <option value="">설정 안 함</option>
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>
+                      {i}시
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </motion.div>
+          )}
         </div>
 
         {/* 일기 잠금 설정 */}

@@ -8,6 +8,9 @@ from app.models.conversation_message import ConversationMessage
 from app.models.pattern_log import PatternLog
 from app.models.refresh_token import RefreshToken
 from app.models.audit_log import AuditLog
+from app.models.check_in import CheckIn
+from app.models.check_in_message import CheckInMessage
+from app.models.push_subscription import PushSubscription
 
 __all__ = [
     'User',
@@ -21,4 +24,7 @@ __all__ = [
     'PatternLog',
     'RefreshToken',
     'AuditLog',
+    'CheckIn',
+    'CheckInMessage',
+    'PushSubscription',
 ]

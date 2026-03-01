@@ -9,6 +9,7 @@ celery = Celery(
     include=[
         'app.tasks.entry_tasks',
         'app.tasks.pattern_tasks',
+        'app.tasks.reminder_tasks',
     ],
 )
 
@@ -31,6 +32,10 @@ def configure_celery(app):
             'weekly-pattern-analysis': {
                 'task': 'app.tasks.pattern_tasks.generate_weekly_patterns',
                 'schedule': crontab(day_of_week='monday', hour=6, minute=0),
+            },
+            'poll-due-reminders': {
+                'task': 'app.tasks.reminder_tasks.poll_due_reminders',
+                'schedule': crontab(minute='*'),
             },
         },
     )

@@ -36,6 +36,11 @@ class Config:
     # CORS
     FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 
+    # VAPID (Web Push)
+    VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', '').replace('\\n', '\n')
+    VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', '')
+    VAPID_CLAIMS_SUB = os.environ.get('VAPID_CLAIMS_EMAIL', 'mailto:admin@mindlog.app')
+
     # Rate limiting
     RATELIMIT_STORAGE_URI = REDIS_URL
     RATELIMIT_DEFAULT = '200 per hour'

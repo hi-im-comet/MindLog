@@ -11,6 +11,8 @@ import { EntryView } from '@/pages/EntryView'
 import { EntryChat } from '@/pages/EntryChat'
 import { Insights } from '@/pages/Insights'
 import { Settings } from '@/pages/Settings'
+import { Reminders } from '@/pages/Reminders'
+import { ReminderChat } from '@/pages/ReminderChat'
 import { ProtectedRoute } from '@/components/shared/ProtectedRoute'
 import { useAuthStore } from '@/store/authStore'
 import { usersApi } from '@/api/users'
@@ -36,6 +38,10 @@ export default function App() {
     setInitialized(true)
     if (accessToken) {
       usersApi.getMe().then(updateUser).catch(() => {})
+    }
+    // 서비스 워커 등록
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {})
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -81,6 +87,16 @@ export default function App() {
             <Route
               path="/settings"
               element={<ProtectedRoute><Settings /></ProtectedRoute>}
+            />
+            {/* 체크인 알림: /reminders */}
+            <Route
+              path="/reminders"
+              element={<ProtectedRoute><Reminders /></ProtectedRoute>}
+            />
+            {/* 체크인 대화: /reminders/:id/chat */}
+            <Route
+              path="/reminders/:id/chat"
+              element={<ProtectedRoute><ReminderChat /></ProtectedRoute>}
             />
 
             {/* Fallback */}
