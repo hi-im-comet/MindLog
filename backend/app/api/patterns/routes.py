@@ -79,6 +79,50 @@ def delete_pattern_log(log_id):
     return api_response({'message': '해당 변화 로그가 삭제되었습니다.'})
 
 
+@patterns_bp.route('/weekly', methods=['GET'])
+@jwt_required()
+def get_weekly_summary():
+    """
+    현재 주간 요약 + 과거 주간 요약 목록 반환 (canonical 레코드만).
+
+    canonical: period_start의 요일 == 사용자의 week_start_day
+    반환: { this_week, past_weeks (최대 4개), week_start }
+    """
+    from zoneinfo import ZoneInfo
+    from datetime import datetime, timezone as tz_mod
+    from app.models.user import User
+    from app.services.pattern_analyzer import get_week_range
+
+    user_id = get_jwt_identity()
+    profile = UserProfile.query.filter_by(user_id=user_id).first()
+    week_start_day = profile.week_start_day if (profile and profile.week_start_day is not None) else 0
+
+    user = User.query.filter_by(id=user_id).first()
+    user_tz = ZoneInfo((user.timezone if user else None) or 'Asia/Seoul')
+    today_local = datetime.now(tz_mod.utc).astimezone(user_tz).date()
+
+    this_week_start, _ = get_week_range(today_local, week_start_day)
+
+    all_weekly = (
+        PatternLog.query
+        .filter_by(user_id=user_id, log_type='weekly')
+        .order_by(PatternLog.period_start.desc())
+        .all()
+    )
+
+    # canonical: period_start의 weekday() == week_start_day
+    canonical = [l for l in all_weekly if l.period_start.weekday() == week_start_day]
+
+    this_week = next((l for l in canonical if l.period_start == this_week_start), None)
+    past_weeks = [l for l in canonical if l.period_start != this_week_start]
+
+    return api_response({
+        'this_week': this_week.to_dict() if this_week else None,
+        'past_weeks': [l.to_dict() for l in past_weeks[:4]],
+        'week_start': str(this_week_start),
+    })
+
+
 @patterns_bp.route('/generate', methods=['POST'])
 @jwt_required()
 def generate_pattern():

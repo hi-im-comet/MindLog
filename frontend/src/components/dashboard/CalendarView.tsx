@@ -20,9 +20,10 @@ const MOOD_BG: Record<number, string> = {
   10: 'bg-emerald-300',
 }
 
-const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
+// 일요일 기준 순서 (JS getDay() 규칙)
+const DAY_LABELS_BASE = ['일', '월', '화', '수', '목', '금', '토']
 
-export function CalendarView() {
+export function CalendarView({ weekStartDay = 0 }: { weekStartDay?: number }) {
   const navigate = useNavigate()
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const year = currentMonth.getFullYear()
@@ -34,7 +35,11 @@ export function CalendarView() {
   })
 
   const days: CalendarDay[] = data?.days || []
-  const firstDayOfWeek = getDay(startOfMonth(currentMonth)) // 0=Sun
+
+  // week_start_day(0=월…6=일) → JS getDay()(0=일…6=토) 변환
+  const jsWeekStart = (weekStartDay + 1) % 7
+  const dayLabels = [...DAY_LABELS_BASE.slice(jsWeekStart), ...DAY_LABELS_BASE.slice(0, jsWeekStart)]
+  const firstDayOfWeek = (getDay(startOfMonth(currentMonth)) - jsWeekStart + 7) % 7
 
   const handleDayClick = (day: CalendarDay) => {
     navigate(`/entry/${day.date}`)
@@ -64,8 +69,8 @@ export function CalendarView() {
 
       {/* Day labels */}
       <div className="grid grid-cols-7 mb-1">
-        {DAY_LABELS.map((d) => (
-          <div key={d} className="text-center text-xs text-gray-400 py-1">
+        {dayLabels.map((d, i) => (
+          <div key={i} className="text-center text-xs text-gray-400 py-1">
             {d}
           </div>
         ))}

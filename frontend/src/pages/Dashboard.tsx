@@ -220,7 +220,7 @@ export function Dashboard() {
         )}
 
         {/* Calendar */}
-        <CalendarView />
+        <CalendarView weekStartDay={user?.profile?.week_start_day ?? 0} />
 
         {/* Search + filter */}
         <div className="space-y-2">

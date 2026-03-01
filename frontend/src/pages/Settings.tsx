@@ -512,7 +512,7 @@ export function Settings() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">주 시작일</label>
             <p className="text-xs text-gray-400 mb-1.5">
-              주간 분석이 이 요일 기준으로 생성돼요.
+              홈 달력 시작 요일과 주간 분석 기준이 함께 바뀌어요.
             </p>
             <select
               {...register('week_start_day')}
