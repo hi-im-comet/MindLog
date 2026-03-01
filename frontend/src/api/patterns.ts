@@ -1,10 +1,15 @@
 import { apiClient } from './client'
-import type { PatternLog, InsightsData } from '@/types/pattern'
+import type { PatternLog, InsightsData, WeeklySummaryResponse } from '@/types/pattern'
 
 export const patternsApi = {
   list: async (params?: { limit?: number; type?: string }): Promise<PatternLog[]> => {
     const res = await apiClient.get('/api/patterns', { params })
     return res.data.data.patterns
+  },
+
+  getWeekly: async (): Promise<WeeklySummaryResponse> => {
+    const res = await apiClient.get('/api/patterns/weekly')
+    return res.data.data
   },
 
   generate: async (periodType: 'weekly' | 'monthly' | 'semiannual' = 'weekly'): Promise<PatternLog | null> => {

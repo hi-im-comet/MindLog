@@ -8,7 +8,7 @@ import { PatternCard } from '@/components/insights/PatternCard'
 import { patternsApi } from '@/api/patterns'
 import { entriesApi } from '@/api/entries'
 import { clsx } from 'clsx'
-import type { PatternLog } from '@/types/pattern'
+import type { PatternLog, WeeklySummaryResponse } from '@/types/pattern'
 
 type LogTab = 'weekly' | 'monthly' | 'semiannual'
 
@@ -29,10 +29,10 @@ export function Insights() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
-  // 각 탭별 최신 로그 목록 조회 (최대 5개)
-  const { data: weeklyLogs = [], isLoading: weeklyLoading } = useQuery({
+  // 주간: 새 canonical 전용 엔드포인트 사용
+  const { data: weeklyData, isLoading: weeklyLoading } = useQuery<WeeklySummaryResponse>({
     queryKey: ['patterns', 'weekly'],
-    queryFn: () => patternsApi.list({ limit: 5, type: 'weekly' }),
+    queryFn: () => patternsApi.getWeekly(),
     staleTime: 1000 * 60 * 5,
   })
 
@@ -92,11 +92,13 @@ export function Insights() {
     return { tagMap: map, tagList: Object.keys(map).sort() }
   }, [allEntriesData])
 
-  // 현재 탭의 로그/로딩 상태
-  const currentLogs: PatternLog[] =
-    tab === 'weekly' ? weeklyLogs : tab === 'monthly' ? monthlyLogs : semiannualLogs
+  // 현재 탭의 로딩 상태
   const currentLoading =
     tab === 'weekly' ? weeklyLoading : tab === 'monthly' ? monthlyLoading : semiannualLoading
+
+  // 월간/6개월 탭용 로그 배열
+  const currentNonWeeklyLogs: PatternLog[] =
+    tab === 'monthly' ? monthlyLogs : semiannualLogs
 
   const errorMsg =
     (generateMutation.error as any)?.response?.data?.error ??
@@ -157,9 +159,41 @@ export function Insights() {
             <div className="h-20 bg-gray-100 rounded-2xl" />
             <div className="h-20 bg-gray-100 rounded-2xl" />
           </div>
-        ) : currentLogs.length > 0 ? (
+        ) : tab === 'weekly' ? (
+          /* 주간 탭: this_week + past_weeks (각 캘린더 주 정확히 1개) */
           <div className="space-y-3">
-            {currentLogs.map((p, i) => (
+            {weeklyData?.this_week ? (
+              <PatternCard
+                key={weeklyData.this_week.id}
+                pattern={weeklyData.this_week}
+                defaultExpanded={true}
+                onUpdate={handlePatternUpdate}
+                onDelete={handlePatternDelete}
+              />
+            ) : (
+              <div className="card p-6 text-center text-gray-400 space-y-2">
+                <p className="text-sm">이번 주 분석이 아직 없어요.</p>
+                <p className="text-xs">일기를 작성한 뒤 "지금 분석" 버튼을 눌러보세요.</p>
+              </div>
+            )}
+            {(weeklyData?.past_weeks ?? []).length > 0 && (
+              <>
+                <p className="text-xs text-gray-400 pt-1">지난 주간 기록</p>
+                {weeklyData!.past_weeks.map((p) => (
+                  <PatternCard
+                    key={p.id}
+                    pattern={p}
+                    defaultExpanded={false}
+                    onUpdate={handlePatternUpdate}
+                    onDelete={handlePatternDelete}
+                  />
+                ))}
+              </>
+            )}
+          </div>
+        ) : currentNonWeeklyLogs.length > 0 ? (
+          <div className="space-y-3">
+            {currentNonWeeklyLogs.map((p, i) => (
               <PatternCard
                 key={p.id}
                 pattern={p}
@@ -172,7 +206,6 @@ export function Insights() {
         ) : (
           <div className="card p-6 text-center text-gray-400 space-y-2">
             <p className="text-sm">
-              {tab === 'weekly' && '이번 주 분석이 아직 없어요.'}
               {tab === 'monthly' && '이번 달 분석이 아직 없어요.'}
               {tab === 'semiannual' && '6개월 분석이 아직 없어요.'}
             </p>

@@ -15,6 +15,12 @@ export interface PatternLog {
   generated_at: string
 }
 
+export interface WeeklySummaryResponse {
+  this_week: PatternLog | null
+  past_weeks: PatternLog[]
+  week_start: string  // ISO date string of this week's canonical start
+}
+
 export interface MoodDataPoint {
   date: string
   mood: number | null
