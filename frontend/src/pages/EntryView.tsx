@@ -8,6 +8,7 @@ import { Layout } from '@/components/shared/Layout'
 import { entriesApi } from '@/api/entries'
 import { usersApi } from '@/api/users'
 import { useAuthStore } from '@/store/authStore'
+import { useLockStore } from '@/store/lockStore'
 import { useAutoLock } from '@/hooks/useAutoLock'
 import { iwa } from '@/utils/josa'
 
@@ -195,6 +196,7 @@ export function EntryView() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useAuthStore((s) => s.user)
+  const { sessionLocked, lockSession, unlockSession } = useLockStore()
   const aiName = user?.profile?.ai_name
   const lockEnabled = user?.profile?.entry_lock_enabled ?? false
   const hasLockPassword = user?.profile?.has_lock_password ?? false
@@ -208,7 +210,10 @@ export function EntryView() {
 
   // 자동 잠금: 잠긴 일기를 이미 비번으로 열었을 때만 적용
   const shouldAutoLock = lockEnabled && hasLockPassword && isUnlocked && autoLockEnabled
-  const handleAutoLock = useCallback(() => setIsUnlocked(false), [])
+  const handleAutoLock = useCallback(() => {
+    setIsUnlocked(false)
+    lockSession()
+  }, [lockSession])
   useAutoLock({ enabled: shouldAutoLock, timeoutMinutes: autoLockTimeout, onLock: handleAutoLock })
 
   const { data: entry, isLoading } = useQuery({

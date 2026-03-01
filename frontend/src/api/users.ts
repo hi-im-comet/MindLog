@@ -15,6 +15,7 @@ export interface UpdateMePayload {
   daily_message_enabled?: boolean
   daily_message_time?: string
   week_start_day?: number
+  daily_lock_enabled?: boolean
 }
 
 export const usersApi = {

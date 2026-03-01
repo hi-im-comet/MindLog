@@ -31,6 +31,24 @@ export function EntryEditor() {
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   const [isInitializing, setIsInitializing] = useState(true)
 
+  // 잠금
+  const lockEnabled = user?.profile?.entry_lock_enabled ?? false
+  const hasLockPassword = user?.profile?.has_lock_password ?? false
+  const [isLocked, setIsLocked] = useState(false)
+  const [isSessionUnlocked, setIsSessionUnlocked] = useState(false) // 이번 세션에서 비번 확인 완료
+  // 잠금 오버레이 (잠긴 일기 열람 시)
+  const [viewOverlayPw, setViewOverlayPw] = useState('')
+  const [viewOverlayError, setViewOverlayError] = useState('')
+  const [viewOverlayLoading, setViewOverlayLoading] = useState(false)
+  // 잠금 설정 모달 (새로 잠글 때)
+  const [showLockModal, setShowLockModal] = useState(false)
+  const [lockPw, setLockPw] = useState('')
+  const [lockPwError, setLockPwError] = useState('')
+  const [lockPwLoading, setLockPwLoading] = useState(false)
+  // 잠금 해제 확인 모달
+  const [showUnlockConfirm, setShowUnlockConfirm] = useState(false)
+  const [unlockLoading, setUnlockLoading] = useState(false)
+
   // 즐겨찾기
   const [isFavorite, setIsFavorite] = useState(false)
   const [favPending, setFavPending] = useState(false)
@@ -85,6 +103,7 @@ export function EntryEditor() {
             userMessagesRef.current = existing.raw_content.split('\n\n').filter(Boolean)
           }
           setIsFavorite(existing.is_favorite ?? false)
+          setIsLocked(existing.is_locked ?? false)
           setActiveMood(existing.ai_mood_override || user?.profile?.ai_mood_default || 'empathy')
           setActiveLength(existing.ai_response_length_override || user?.profile?.ai_response_length_default || 'normal')
         } else {
@@ -216,6 +235,55 @@ export function EntryEditor() {
     navigate(`/view/${entryId}`)
   }
 
+  const handleViewOverlaySubmit = async () => {
+    if (!viewOverlayPw || viewOverlayLoading) return
+    setViewOverlayLoading(true)
+    setViewOverlayError('')
+    try {
+      await usersApi.verifyLock(viewOverlayPw)
+      setIsSessionUnlocked(true)
+      setViewOverlayPw('')
+    } catch (err: any) {
+      const status = err?.response?.status
+      setViewOverlayError(status === 429 ? '잠시 후 다시 시도해주세요.' : '비밀번호가 일치하지 않아요.')
+      setViewOverlayPw('')
+    } finally {
+      setViewOverlayLoading(false)
+    }
+  }
+
+  const handlePermanentUnlock = async () => {
+    if (!entryId || unlockLoading) return
+    setUnlockLoading(true)
+    try {
+      await entriesApi.unlockEntry(entryId)
+      setIsLocked(false)
+      setIsSessionUnlocked(false)
+      setShowUnlockConfirm(false)
+    } catch { } finally {
+      setUnlockLoading(false)
+    }
+  }
+
+  const handleLockConfirm = async () => {
+    if (!entryId || !lockPw || lockPwLoading) return
+    setLockPwLoading(true)
+    setLockPwError('')
+    try {
+      await usersApi.verifyLock(lockPw)
+      await entriesApi.lockEntry(entryId)
+      setIsLocked(true)
+      setShowLockModal(false)
+      setLockPw('')
+    } catch (err: any) {
+      const status = err?.response?.status
+      setLockPwError(status === 429 ? '잠시 후 다시 시도해주세요.' : '비밀번호가 일치하지 않아요.')
+      setLockPw('')
+    } finally {
+      setLockPwLoading(false)
+    }
+  }
+
   const handleFavToggle = async () => {
     if (!entryId || favPending) return
     setFavPending(true)
@@ -259,6 +327,71 @@ export function EntryEditor() {
 
   return (
     <>
+      {/* 잠긴 일기 열람 오버레이 */}
+      {isLocked && !isSessionUnlocked && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/70 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm mx-4 space-y-5">
+            <div className="text-center space-y-1">
+              <p className="text-4xl">🔒</p>
+              <h2 className="text-lg font-bold text-gray-800">잠긴 일기예요</h2>
+              <p className="text-sm text-gray-500">비밀번호를 입력하면 볼 수 있어요.</p>
+            </div>
+            <form
+              onSubmit={(e) => { e.preventDefault(); handleViewOverlaySubmit() }}
+              className="space-y-3"
+            >
+              <input
+                type="password"
+                value={viewOverlayPw}
+                onChange={(e) => { setViewOverlayPw(e.target.value); setViewOverlayError('') }}
+                placeholder="비밀번호"
+                autoFocus
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+              />
+              {viewOverlayError && <p className="text-xs text-red-500">{viewOverlayError}</p>}
+              <button
+                type="submit"
+                disabled={!viewOverlayPw || viewOverlayLoading}
+                className="w-full btn-primary text-sm disabled:opacity-60"
+              >
+                {viewOverlayLoading ? '확인 중...' : '열람하기'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 잠금 해제 확인 모달 */}
+      {showUnlockConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 px-4"
+          onClick={(e) => e.target === e.currentTarget && setShowUnlockConfirm(false)}
+        >
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-xl">
+            <div className="text-center space-y-1">
+              <p className="text-2xl">🔓</p>
+              <h3 className="text-base font-bold text-gray-800">잠금을 해제할까요?</h3>
+              <p className="text-sm text-gray-500">이 일기의 잠금이 영구적으로 풀려요.</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowUnlockConfirm(false)}
+                className="btn-secondary flex-1 text-sm"
+              >
+                취소
+              </button>
+              <button
+                onClick={handlePermanentUnlock}
+                disabled={unlockLoading}
+                className="flex-1 text-sm text-white bg-red-500 hover:bg-red-600 disabled:opacity-60 rounded-xl py-2.5 font-medium transition-colors"
+              >
+                {unlockLoading ? '해제 중...' : '잠금 해제'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     <Layout>
       <div className="max-w-2xl mx-auto flex flex-col" style={{ height: 'calc(100vh - 8rem)' }}>
         {/* Header */}
@@ -276,6 +409,23 @@ export function EntryEditor() {
                 title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}
               >
                 {isFavorite ? '⭐' : '☆'}
+              </button>
+            )}
+            {/* 일기 잠금/해제 버튼 */}
+            {lockEnabled && hasLockPassword && entryId && (
+              <button
+                onClick={() => {
+                  if (!isLocked) setShowLockModal(true)
+                  else if (isSessionUnlocked) setShowUnlockConfirm(true)
+                }}
+                className={isLocked
+                  ? (isSessionUnlocked
+                      ? 'text-lg p-1 text-primary-400 hover:text-red-400 transition-colors'
+                      : 'text-lg p-1 text-primary-400 cursor-default')
+                  : 'text-lg p-1 text-gray-300 hover:text-primary-400 transition-colors'}
+                title={isLocked ? (isSessionUnlocked ? '잠금 해제하기' : '잠금된 일기') : '이 일기 잠금'}
+              >
+                {isLocked ? '🔒' : '🔓'}
               </button>
             )}
             <button
@@ -434,6 +584,49 @@ export function EntryEditor() {
           sourceEntryId={entryId}
           onClose={() => setCreateReminderTask(null)}
         />
+      )}
+
+      {/* 일기 잠금 비밀번호 확인 모달 */}
+      {showLockModal && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowLockModal(false); setLockPw(''); setLockPwError('') } }}
+        >
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-xl">
+            <div className="text-center space-y-1">
+              <p className="text-2xl">🔒</p>
+              <h3 className="text-base font-bold text-gray-800">일기 잠금</h3>
+              <p className="text-sm text-gray-500">비밀번호를 확인한 후 이 일기를 잠글게요.</p>
+            </div>
+            <div className="space-y-3">
+              <input
+                type="password"
+                value={lockPw}
+                onChange={(e) => { setLockPw(e.target.value); setLockPwError('') }}
+                onKeyDown={(e) => e.key === 'Enter' && handleLockConfirm()}
+                placeholder="잠금 비밀번호"
+                className="input-field text-sm w-full"
+                autoFocus
+              />
+              {lockPwError && <p className="text-xs text-red-500">{lockPwError}</p>}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowLockModal(false); setLockPw(''); setLockPwError('') }}
+                className="btn-secondary flex-1 text-sm"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleLockConfirm}
+                disabled={!lockPw || lockPwLoading}
+                className="btn-primary flex-1 text-sm disabled:opacity-60"
+              >
+                {lockPwLoading ? '잠금 중...' : '잠금하기'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

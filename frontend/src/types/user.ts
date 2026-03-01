@@ -14,6 +14,7 @@ export interface UserProfile {
   has_lock_password: boolean
   auto_lock_enabled: boolean
   auto_lock_timeout: number
+  daily_lock_enabled: boolean
   last_analysis_at: string | null
   ai_mood_default: AiMood
   ai_response_length_default: ResponseLength

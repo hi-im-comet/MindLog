@@ -1,6 +1,9 @@
+import { useState, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { format } from 'date-fns'
 import { useAuthStore } from '@/store/authStore'
+import { useLockStore } from '@/store/lockStore'
+import { usersApi } from '@/api/users'
 import { authApi } from '@/api/auth'
 import { clsx } from 'clsx'
 import { wa } from '@/utils/josa'
@@ -16,8 +19,68 @@ interface NavItem {
   matchPrefix: string
 }
 
+// ── 세션 잠금 오버레이 ─────────────────────────────────────────────────────────
+function SessionLockOverlay({ onUnlocked }: { onUnlocked: () => void }) {
+  const [pw, setPw] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!pw || loading) return
+    setLoading(true)
+    setError('')
+    try {
+      await usersApi.verifyLock(pw)
+      onUnlocked()
+    } catch {
+      setError('비밀번호가 일치하지 않아요.')
+      setPw('')
+      setTimeout(() => inputRef.current?.focus(), 50)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/70 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm mx-4 space-y-5">
+        <div className="text-center space-y-1">
+          <p className="text-4xl">🔒</p>
+          <h2 className="text-lg font-bold text-gray-800">잠금 해제</h2>
+          <p className="text-sm text-gray-500">비밀번호를 입력하면 계속 볼 수 있어요.</p>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input
+            ref={inputRef}
+            type="password"
+            value={pw}
+            onChange={(e) => setPw(e.target.value)}
+            placeholder="비밀번호"
+            autoFocus
+            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+          />
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          <button
+            type="submit"
+            disabled={!pw || loading}
+            className="w-full btn-primary text-sm disabled:opacity-60"
+          >
+            {loading ? '확인 중...' : '잠금 해제'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── 메인 레이아웃 ─────────────────────────────────────────────────────────────
 export function Layout({ children }: Props) {
   const { user, refreshToken, logout } = useAuthStore()
+  const { sessionLocked, unlockSession } = useLockStore()
+  const lockEnabled = user?.profile?.entry_lock_enabled ?? false
+  const hasLockPassword = user?.profile?.has_lock_password ?? false
   const aiName = user?.profile?.ai_name
 
   const NAV_ITEMS: NavItem[] = [
@@ -47,6 +110,11 @@ export function Layout({ children }: Props) {
 
   return (
     <div className="min-h-screen flex flex-col">
+      {/* 세션 잠금 오버레이 */}
+      {sessionLocked && lockEnabled && hasLockPassword && (
+        <SessionLockOverlay onUnlocked={unlockSession} />
+      )}
+
       {/* Top nav */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-40">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
