@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { clsx } from 'clsx'
 import { Layout } from '@/components/shared/Layout'
@@ -11,6 +11,7 @@ import { EntryPreviewCard } from '@/components/dashboard/EntryPreviewCard'
 import { useAuthStore } from '@/store/authStore'
 import { entriesApi } from '@/api/entries'
 import { usersApi } from '@/api/users'
+import { dailyMessagesApi } from '@/api/dailyMessages'
 import { iwa, ga } from '@/utils/josa'
 
 function DashboardSkeleton() {
@@ -104,6 +105,12 @@ export function Dashboard() {
     },
   })
 
+  const { data: dailyMsg } = useQuery({
+    queryKey: ['daily-message', 'today'],
+    queryFn: dailyMessagesApi.getToday,
+    staleTime: 1000 * 60 * 10,
+  })
+
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
     queryKey: ['entries', debouncedQ, showFavoritesOnly],
     queryFn: ({ pageParam = 1 }) => entriesApi.list({
@@ -132,6 +139,18 @@ export function Dashboard() {
           </h2>
           <p className="text-gray-500 mt-1 text-sm">{todayLabel} · 오늘 어떠셨나요?</p>
         </div>
+
+        {/* Daily message */}
+        {dailyMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="card p-4 bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-100"
+          >
+            <p className="text-xs font-medium text-violet-500 mb-1">✨ 오늘의 메시지</p>
+            <p className="text-sm text-gray-700 leading-relaxed">{dailyMsg.content}</p>
+          </motion.div>
+        )}
 
         {/* Streak badge */}
         <StreakBadge days={streakDays} />

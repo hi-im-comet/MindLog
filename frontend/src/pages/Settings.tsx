@@ -11,11 +11,31 @@ import { ko } from 'date-fns/locale'
 import { Layout } from '@/components/shared/Layout'
 import { useAuthStore } from '@/store/authStore'
 import { usersApi } from '@/api/users'
-import { MOOD_OPTIONS, LENGTH_OPTIONS } from '@/constants/aiMood'
+import { MOOD_OPTIONS, LENGTH_OPTIONS, MOOD_LENGTH_PRESET } from '@/constants/aiMood'
+
+const TIMEZONE_OPTIONS = [
+  { value: 'Asia/Seoul', label: '서울 (KST, UTC+9)' },
+  { value: 'Asia/Tokyo', label: '도쿄 (JST, UTC+9)' },
+  { value: 'Asia/Shanghai', label: '상하이 (CST, UTC+8)' },
+  { value: 'Asia/Singapore', label: '싱가포르 (SGT, UTC+8)' },
+  { value: 'America/New_York', label: '뉴욕 (EST/EDT)' },
+  { value: 'America/Los_Angeles', label: '로스앤젤레스 (PST/PDT)' },
+  { value: 'Europe/London', label: '런던 (GMT/BST)' },
+  { value: 'Europe/Paris', label: '파리 (CET/CEST)' },
+  { value: 'UTC', label: 'UTC' },
+]
+
+const WEEK_START_OPTIONS = [
+  { value: 0, label: '월요일 (기본)' },
+  { value: 6, label: '일요일' },
+  { value: 5, label: '토요일' },
+]
 
 const schema = z.object({
   display_name: z.string().min(1, '이름을 입력해주세요.').max(100),
   ai_name: z.string().max(50).optional(),
+  timezone: z.string(),
+  week_start_day: z.coerce.number().min(0).max(6),
 })
 
 type FormData = z.infer<typeof schema>
@@ -106,11 +126,11 @@ function openPrintWindow(exportData: any): void {
       const conversation =
         entry.conversation?.messages?.length > 0
           ? `<div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;"><p style="font-size:12px;font-weight:600;color:#888;margin-bottom:8px;">AI와의 대화</p>${entry.conversation.messages.map((m: any) => {
-              const speaker = m.role === 'user' ? '나' : aiName
-              const bg = m.role === 'user' ? '#f0f4ff' : '#f8f8f8'
-              const align = m.role === 'user' ? 'right' : 'left'
-              return `<div style="text-align:${align};margin-bottom:8px;"><span style="display:inline-block;background:${bg};border-radius:12px;padding:6px 10px;font-size:13px;max-width:80%;text-align:left;"><b style="font-size:11px;color:#999;">${speaker}</b><br>${m.content.replace(/\n/g, '<br>')}</span></div>`
-            }).join('')}</div>`
+            const speaker = m.role === 'user' ? '나' : aiName
+            const bg = m.role === 'user' ? '#f0f4ff' : '#f8f8f8'
+            const align = m.role === 'user' ? 'right' : 'left'
+            return `<div style="text-align:${align};margin-bottom:8px;"><span style="display:inline-block;background:${bg};border-radius:12px;padding:6px 10px;font-size:13px;max-width:80%;text-align:left;"><b style="font-size:11px;color:#999;">${speaker}</b><br>${m.content.replace(/\n/g, '<br>')}</span></div>`
+          }).join('')}</div>`
           : ''
       return `<div style="margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid #eee;"><h3 style="margin:0 0 4px;font-size:15px;">${dateStr}</h3>${cats}<p style="font-size:14px;line-height:1.7;">${content}</p>${segments}${conversation}</div>`
     })
@@ -159,10 +179,14 @@ export function Settings() {
   const [autoLockSaving, setAutoLockSaving] = useState(false)
   const [moodSaving, setMoodSaving] = useState(false)
   const [reminderSaving, setReminderSaving] = useState(false)
+  const [dailyMsgSaving, setDailyMsgSaving] = useState(false)
 
   const remindersEnabled = user?.profile?.reminders_enabled ?? true
   const quietHoursStart = user?.profile?.quiet_hours_start ?? null
   const quietHoursEnd = user?.profile?.quiet_hours_end ?? null
+  const dailyMsgEnabled = user?.profile?.daily_message_enabled ?? true
+  const dailyMsgTime = user?.profile?.daily_message_time ?? '08:00'
+  const [dailyMsgHour, dailyMsgMinute] = dailyMsgTime.split(':').map(Number)
 
   const currentMood = user?.profile?.ai_mood_default || 'empathy'
   const currentLength = user?.profile?.ai_response_length_default || 'normal'
@@ -170,7 +194,12 @@ export function Settings() {
   const handleMoodChange = async (mood: string) => {
     setMoodSaving(true)
     try {
-      const updated = await usersApi.updateMe({ ai_mood_default: mood })
+      // 무드에 따라 기본 길이를 함께 맞춰서 저장 (길이 차이를 확실히 내기 위한 1차 장치)
+      const presetLen = (MOOD_LENGTH_PRESET as any)[mood]
+      const payload: any = { ai_mood_default: mood }
+      if (presetLen) payload.ai_response_length_default = presetLen
+
+      const updated = await usersApi.updateMe(payload)
       updateUser(updated)
     } catch { /* ignore */ } finally {
       setMoodSaving(false)
@@ -208,6 +237,28 @@ export function Settings() {
       updateUser(updated)
     } catch { /* ignore */ } finally {
       setReminderSaving(false)
+    }
+  }
+
+  const handleDailyMsgToggle = async () => {
+    setDailyMsgSaving(true)
+    try {
+      const updated = await usersApi.updateMe({ daily_message_enabled: !dailyMsgEnabled })
+      updateUser(updated)
+    } catch { /* ignore */ } finally {
+      setDailyMsgSaving(false)
+    }
+  }
+
+  const handleDailyMsgTimeChange = async (hour: number, minute: number) => {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const time = `${pad(hour)}:${pad(minute)}`
+    setDailyMsgSaving(true)
+    try {
+      const updated = await usersApi.updateMe({ daily_message_time: time })
+      updateUser(updated)
+    } catch { /* ignore */ } finally {
+      setDailyMsgSaving(false)
     }
   }
 
@@ -319,6 +370,8 @@ export function Settings() {
     defaultValues: {
       display_name: user?.display_name ?? '',
       ai_name: user?.profile?.ai_name ?? '',
+      timezone: user?.timezone ?? 'Asia/Seoul',
+      week_start_day: user?.profile?.week_start_day ?? 0,
     },
   })
 
@@ -338,6 +391,8 @@ export function Settings() {
       const updated = await usersApi.updateMe({
         display_name: data.display_name,
         ai_name: data.ai_name?.trim() || null,
+        timezone: data.timezone,
+        week_start_day: Number(data.week_start_day),
       })
       updateUser(updated)
       setSaved(true)
@@ -439,6 +494,36 @@ export function Settings() {
             )}
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">타임존</label>
+            <p className="text-xs text-gray-400 mb-1.5">
+              일일 메시지·알림 시각이 이 타임존 기준으로 동작해요.
+            </p>
+            <select
+              {...register('timezone')}
+              className="input-field"
+            >
+              {TIMEZONE_OPTIONS.map((tz) => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">주 시작일</label>
+            <p className="text-xs text-gray-400 mb-1.5">
+              주간 분석이 이 요일 기준으로 생성돼요.
+            </p>
+            <select
+              {...register('week_start_day')}
+              className="input-field"
+            >
+              {WEEK_START_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+
           {errors.root && (
             <p className="text-sm text-red-500 bg-red-50 rounded-lg p-3">{errors.root.message}</p>
           )}
@@ -484,6 +569,9 @@ export function Settings() {
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-gray-500">응답 길이</p>
+            <p className="text-[11px] text-gray-400 leading-relaxed">
+              ※ 무드별로 기본 길이가 자동 적용돼요 (친구·객관=짧게, 조언=길게).
+            </p>
             <div className="flex gap-2">
               {LENGTH_OPTIONS.map((opt) => (
                 <button
@@ -578,6 +666,70 @@ export function Settings() {
                     <option key={i} value={i}>
                       {i}시
                     </option>
+                  ))}
+                </select>
+              </div>
+            </motion.div>
+          )}
+        </div>
+
+        {/* 일일 메시지 */}
+        <div className="card p-6 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700">일일 메시지</h2>
+            <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
+              매일 설정한 시각에 AI가 어제 일기를 바탕으로 짧은 응원 메시지를 보내드려요.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">매일 아침 메시지 받기</p>
+            <button
+              onClick={handleDailyMsgToggle}
+              disabled={dailyMsgSaving}
+              className={clsx(
+                'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-60',
+                dailyMsgEnabled ? 'bg-primary-500' : 'bg-gray-200',
+              )}
+              role="switch"
+              aria-checked={dailyMsgEnabled}
+            >
+              <span
+                className={clsx(
+                  'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200',
+                  dailyMsgEnabled ? 'translate-x-5' : 'translate-x-0',
+                )}
+              />
+            </button>
+          </div>
+
+          {dailyMsgEnabled && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-2"
+            >
+              <p className="text-xs font-medium text-gray-500">메시지 받을 시각</p>
+              <div className="flex items-center gap-2">
+                <select
+                  value={dailyMsgHour}
+                  onChange={(e) => handleDailyMsgTimeChange(Number(e.target.value), dailyMsgMinute)}
+                  disabled={dailyMsgSaving}
+                  className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:border-primary-300 disabled:opacity-60"
+                >
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>{i}시</option>
+                  ))}
+                </select>
+                <span className="text-gray-400 text-sm">:</span>
+                <select
+                  value={dailyMsgMinute}
+                  onChange={(e) => handleDailyMsgTimeChange(dailyMsgHour, Number(e.target.value))}
+                  disabled={dailyMsgSaving}
+                  className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-2 focus:outline-none focus:border-primary-300 disabled:opacity-60"
+                >
+                  {[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((m) => (
+                    <option key={m} value={m}>{String(m).padStart(2, '0')}분</option>
                   ))}
                 </select>
               </div>
@@ -726,8 +878,8 @@ export function Settings() {
                     !opt.ready
                       ? 'border-transparent bg-gray-50 text-gray-300 cursor-not-allowed'
                       : exportFormat === opt.value
-                      ? 'border-primary-400 bg-primary-50 text-primary-600'
-                      : 'border-transparent bg-gray-50 text-gray-500 hover:border-gray-200',
+                        ? 'border-primary-400 bg-primary-50 text-primary-600'
+                        : 'border-transparent bg-gray-50 text-gray-500 hover:border-gray-200',
                   )}
                 >
                   {opt.label}
@@ -850,8 +1002,8 @@ export function Settings() {
             {exportLoading
               ? '준비 중...'
               : exportFormat === 'pdf'
-              ? '🖨️ 인쇄 창 열기'
-              : `📦 ${FORMAT_OPTIONS.find((f) => f.value === exportFormat)?.label ?? ''} 파일 다운로드`}
+                ? '🖨️ 인쇄 창 열기'
+                : `📦 ${FORMAT_OPTIONS.find((f) => f.value === exportFormat)?.label ?? ''} 파일 다운로드`}
           </button>
         </div>
 

@@ -110,13 +110,13 @@ def _trigger_ai_tasks(entry_id: str, user_id: str, is_draft: bool) -> None:
             update_user_profile_task.delay(user_id)
         if should_analyze:
             from app.tasks.pattern_tasks import analyze_user_patterns
-            analyze_user_patterns.delay(user_id, period_days=7)
+            analyze_user_patterns.delay(user_id, period_type='weekly')
     except Exception as e:
         logger.warning(f'AI 태스크 발행 실패 (Celery 미실행?): {e}')
         try:
             if should_analyze:
                 from app.services.pattern_analyzer import analyze_patterns
-                analyze_patterns(user_id, period_days=7)
+                analyze_patterns(user_id, period_type='weekly')
             if total >= 1 and total % 5 == 0:
                 from app.services.user_profile_service import update_user_profile
                 update_user_profile(user_id)

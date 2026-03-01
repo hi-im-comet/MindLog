@@ -88,11 +88,23 @@ _MAX_TOKENS_MAP = {
 # 기간 계산
 # ──────────────────────────────────────────
 
+def get_week_range(ref_date: date, week_start_day: int = 0) -> tuple[date, date]:
+    """
+    ref_date 기준 캘린더 주의 (start_date, end_date) 반환.
+    week_start_day: 0=월요일 … 6=일요일 (Python weekday() 규칙).
+    end_date는 항상 start_date + 6일 (전체 주 범위, 미래 날짜 포함 가능).
+    """
+    days_since_start = (ref_date.weekday() - week_start_day) % 7
+    start_date = ref_date - timedelta(days=days_since_start)
+    end_date = start_date + timedelta(days=6)
+    return start_date, end_date
+
+
 def get_period_dates(period_type: str) -> tuple[date, date]:
     """기간 타입에 따라 결정론적인 (period_start, period_end) 반환."""
     today = date.today()
     if period_type == 'weekly':
-        # 이번 주 월요일 ~ 오늘
+        # 이번 주 월요일 ~ 오늘 (레거시; analyze_patterns는 get_week_range 사용)
         period_start = today - timedelta(days=today.weekday())
         return period_start, today
     elif period_type == 'monthly':
@@ -123,7 +135,21 @@ def analyze_patterns(user_id: str, period_type: str = 'weekly') -> Optional[Patt
         logger.warning(f'알 수 없는 period_type: {period_type}')
         return None
 
-    period_start, period_end = get_period_dates(period_type)
+    if period_type == 'weekly':
+        from app.models.user_profile import UserProfile as _UserProfile
+        from app.models.user import User as _User
+        from zoneinfo import ZoneInfo
+        from datetime import datetime, timezone as _utc
+        _profile = _UserProfile.query.filter_by(user_id=user_id).first()
+        _wsd = _profile.week_start_day if (_profile and _profile.week_start_day is not None) else 0
+        _user = _User.query.filter_by(id=user_id).first()
+        _tz = ZoneInfo((_user.timezone if _user else None) or 'Asia/Seoul')
+        _today = datetime.now(_tz).date()
+        period_start, period_end = get_week_range(_today, _wsd)
+        query_end = min(period_end, _today)   # 미래 날짜 항목 쿼리 방지
+    else:
+        period_start, period_end = get_period_dates(period_type)
+        query_end = period_end
 
     # 해당 기간 일기 조회
     entries = (
@@ -131,7 +157,7 @@ def analyze_patterns(user_id: str, period_type: str = 'weekly') -> Optional[Patt
         .filter_by(user_id=user_id, is_draft=False)
         .filter(JournalEntry.deleted_at.is_(None))
         .filter(JournalEntry.entry_date >= period_start)
-        .filter(JournalEntry.entry_date <= period_end)
+        .filter(JournalEntry.entry_date <= query_end)
         .order_by(JournalEntry.entry_date)
         .all()
     )

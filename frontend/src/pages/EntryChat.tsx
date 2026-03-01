@@ -9,7 +9,7 @@ import { ConversationPanel } from '@/components/conversation/ConversationPanel'
 import { conversationsApi } from '@/api/conversations'
 import { entriesApi } from '@/api/entries'
 import { useAuthStore } from '@/store/authStore'
-import { MOOD_OPTIONS } from '@/constants/aiMood'
+import { MOOD_OPTIONS, type AiMood } from '@/constants/aiMood'
 import type { ResponseMode } from '@/types/conversation'
 
 export function EntryChat() {
@@ -20,8 +20,8 @@ export function EntryChat() {
   const aiName = user?.profile?.ai_name ?? undefined
   const userName = user?.display_name ?? undefined
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [activeMood, setActiveMood] = useState<string>(
-    user?.profile?.ai_mood_default || 'empathy'
+  const [activeMood, setActiveMood] = useState<AiMood>(
+    (user?.profile?.ai_mood_default as AiMood) || 'empathy'
   )
 
   const { data: entry, isLoading: entryLoading } = useQuery({
@@ -54,7 +54,7 @@ export function EntryChat() {
     },
   })
 
-  const handleMoodChange = async (mood: string) => {
+  const handleMoodChange = async (mood: AiMood) => {
     setActiveMood(mood)
     if (id) await entriesApi.update(id, { ai_mood_override: mood })
     if (conversation) await conversationsApi.updateMode(conversation.id, mood as ResponseMode)
@@ -95,7 +95,7 @@ export function EntryChat() {
   }
 
   const dateLabel = format(new Date(entry.entry_date + 'T00:00:00'), 'M월 d일 EEEE', { locale: ko })
-  const displayMood = entry.ai_mood_override || activeMood
+  const displayMood = (entry.ai_mood_override as AiMood) || activeMood
 
   return (
     <Layout>

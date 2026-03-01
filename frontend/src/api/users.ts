@@ -12,6 +12,9 @@ export interface UpdateMePayload {
   reminders_enabled?: boolean
   quiet_hours_start?: number | null
   quiet_hours_end?: number | null
+  daily_message_enabled?: boolean
+  daily_message_time?: string
+  week_start_day?: number
 }
 
 export const usersApi = {

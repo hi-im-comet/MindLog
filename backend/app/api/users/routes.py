@@ -40,6 +40,11 @@ class UserUpdateSchema(Schema):
     reminders_enabled = fields.Boolean()
     quiet_hours_start = fields.Integer(allow_none=True, validate=validate.Range(min=0, max=23))
     quiet_hours_end = fields.Integer(allow_none=True, validate=validate.Range(min=0, max=23))
+    daily_message_enabled = fields.Boolean()
+    daily_message_time = fields.String(
+        validate=validate.Regexp(r'^([01]\d|2[0-3]):[0-5]\d$', error='HH:MM 형식이어야 합니다.')
+    )
+    week_start_day = fields.Integer(validate=validate.Range(min=0, max=6))
     # entry_lock_enabled은 setup-lock / disable-lock 전용 엔드포인트로만 변경 가능
 
 
@@ -84,6 +89,9 @@ def update_me():
     reminders_enabled = data.pop('reminders_enabled', ...)
     quiet_hours_start = data.pop('quiet_hours_start', ...)
     quiet_hours_end = data.pop('quiet_hours_end', ...)
+    daily_message_enabled = data.pop('daily_message_enabled', ...)
+    daily_message_time = data.pop('daily_message_time', ...)
+    week_start_day = data.pop('week_start_day', ...)
 
     for key, value in data.items():
         setattr(user, key, value)
@@ -108,6 +116,12 @@ def update_me():
         user.profile.quiet_hours_start = quiet_hours_start
     if quiet_hours_end is not ...:
         user.profile.quiet_hours_end = quiet_hours_end
+    if daily_message_enabled is not ...:
+        user.profile.daily_message_enabled = daily_message_enabled
+    if daily_message_time is not ...:
+        user.profile.daily_message_time = daily_message_time
+    if week_start_day is not ...:
+        user.profile.week_start_day = week_start_day
 
     db.session.commit()
     return api_response({'user': user.to_dict(include_profile=True)})

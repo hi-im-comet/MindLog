@@ -11,6 +11,7 @@ from app.models.audit_log import AuditLog
 from app.models.check_in import CheckIn
 from app.models.check_in_message import CheckInMessage
 from app.models.push_subscription import PushSubscription
+from app.models.daily_message import DailyMessage
 
 __all__ = [
     'User',
@@ -27,4 +28,5 @@ __all__ = [
     'CheckIn',
     'CheckInMessage',
     'PushSubscription',
+    'DailyMessage',
 ]

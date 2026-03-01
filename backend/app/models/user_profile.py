@@ -27,6 +27,15 @@ class UserProfile(db.Model):
     ai_mood_default = db.Column(db.String(20), nullable=False, default='empathy')
     ai_response_length_default = db.Column(db.String(10), nullable=False, default='normal')
     last_analysis_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # 체크인 알림 설정 (migration: e3f4a5b6c7d8)
+    reminders_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    quiet_hours_start = db.Column(db.Integer, nullable=True)   # 0~23
+    quiet_hours_end = db.Column(db.Integer, nullable=True)     # 0~23
+    # 일일 메시지 설정 (migration: f5g6h7i8j9k0)
+    daily_message_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    daily_message_time = db.Column(db.String(5), nullable=True, default='08:00')  # 'HH:MM'
+    # 주 시작일 (migration: g6h7i8j9k0l1) — 0=월요일 … 6=일요일 (Python weekday() 규칙)
+    week_start_day = db.Column(db.SmallInteger, nullable=False, default=0)
     updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                             onupdate=lambda: datetime.now(timezone.utc))
 
@@ -50,6 +59,12 @@ class UserProfile(db.Model):
             'ai_mood_default': self.ai_mood_default or 'empathy',
             'ai_response_length_default': self.ai_response_length_default or 'normal',
             'last_analysis_at': self.last_analysis_at.isoformat() if self.last_analysis_at else None,
+            'reminders_enabled': self.reminders_enabled if self.reminders_enabled is not None else True,
+            'quiet_hours_start': self.quiet_hours_start,
+            'quiet_hours_end': self.quiet_hours_end,
+            'daily_message_enabled': self.daily_message_enabled if self.daily_message_enabled is not None else True,
+            'daily_message_time': self.daily_message_time or '08:00',
+            'week_start_day': self.week_start_day if self.week_start_day is not None else 0,
         }
 
     def __repr__(self):

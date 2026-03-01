@@ -10,6 +10,7 @@ celery = Celery(
         'app.tasks.entry_tasks',
         'app.tasks.pattern_tasks',
         'app.tasks.reminder_tasks',
+        'app.tasks.daily_message_tasks',
     ],
 )
 
@@ -31,10 +32,14 @@ def configure_celery(app):
         beat_schedule={
             'weekly-pattern-analysis': {
                 'task': 'app.tasks.pattern_tasks.generate_weekly_patterns',
-                'schedule': crontab(day_of_week='monday', hour=6, minute=0),
+                'schedule': crontab(hour=6, minute=0),  # 매일 06:00 UTC; 태스크 내부에서 사용자별 week_start_day 체크
             },
             'poll-due-reminders': {
                 'task': 'app.tasks.reminder_tasks.poll_due_reminders',
+                'schedule': crontab(minute='*'),
+            },
+            'poll-daily-messages': {
+                'task': 'app.tasks.daily_message_tasks.poll_daily_messages',
                 'schedule': crontab(minute='*'),
             },
         },

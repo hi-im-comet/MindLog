@@ -6,6 +6,7 @@ from app.api.conversations.routes import conversations_bp
 from app.api.patterns.routes import patterns_bp
 from app.api.reminders.routes import reminders_bp
 from app.api.push.routes import push_bp
+from app.api.daily_messages.routes import daily_messages_bp
 
 
 def register_blueprints(app):
@@ -17,3 +18,4 @@ def register_blueprints(app):
     app.register_blueprint(patterns_bp)
     app.register_blueprint(reminders_bp)
     app.register_blueprint(push_bp)
+    app.register_blueprint(daily_messages_bp)

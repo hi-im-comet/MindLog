@@ -1,3 +1,6 @@
+export type AiMood = 'empathy' | 'friend' | 'reflection' | 'objective' | 'advice'
+export type ResponseLength = 'short' | 'normal' | 'long'
+
 export interface UserProfile {
   summary: string | null
   known_patterns: string[]
@@ -12,11 +15,14 @@ export interface UserProfile {
   auto_lock_enabled: boolean
   auto_lock_timeout: number
   last_analysis_at: string | null
-  ai_mood_default: string
-  ai_response_length_default: string
+  ai_mood_default: AiMood
+  ai_response_length_default: ResponseLength
   reminders_enabled: boolean
   quiet_hours_start: number | null
   quiet_hours_end: number | null
+  daily_message_enabled: boolean
+  daily_message_time: string
+  week_start_day: number  // 0=월요일 … 6=일요일
 }
 
 export interface User {
