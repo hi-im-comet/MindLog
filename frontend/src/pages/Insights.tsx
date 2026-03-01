@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
@@ -7,6 +7,8 @@ import { Layout } from '@/components/shared/Layout'
 import { PatternCard } from '@/components/insights/PatternCard'
 import { patternsApi } from '@/api/patterns'
 import { entriesApi } from '@/api/entries'
+import { usersApi } from '@/api/users'
+import { useAuthStore } from '@/store/authStore'
 import { clsx } from 'clsx'
 import type { PatternLog, WeeklySummaryResponse } from '@/types/pattern'
 
@@ -24,10 +26,46 @@ const TAB_DESCRIPTIONS: Record<LogTab, string> = {
   semiannual: '6개월 심층 패턴',
 }
 
+function LockedPeriodCard({ pattern }: { pattern: PatternLog }) {
+  const start = format(new Date(pattern.period_start + 'T00:00:00'), 'M.d', { locale: ko })
+  const end = format(new Date(pattern.period_end + 'T00:00:00'), 'M.d', { locale: ko })
+  return (
+    <div className="card p-4 flex items-center gap-3 text-gray-400">
+      <span className="text-lg">🔒</span>
+      <div className="flex-1 text-sm font-medium text-gray-500">{start} – {end}</div>
+      <span className="text-xs">잠긴 일기 포함</span>
+    </div>
+  )
+}
+
 export function Insights() {
   const [tab, setTab] = useState<LogTab>('weekly')
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const { user } = useAuthStore()
+  const hasLockPassword = user?.profile?.has_lock_password ?? false
+  const [isUnlocked, setIsUnlocked] = useState(false)
+  const [lockPw, setLockPw] = useState('')
+  const [lockPwError, setLockPwError] = useState('')
+  const [lockPwLoading, setLockPwLoading] = useState(false)
+  const lockInputRef = useRef<HTMLInputElement>(null)
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!lockPw || lockPwLoading) return
+    setLockPwLoading(true)
+    setLockPwError('')
+    try {
+      await usersApi.verifyLock(lockPw)
+      setIsUnlocked(true)
+    } catch {
+      setLockPwError('비밀번호가 일치하지 않아요.')
+      setLockPw('')
+      setTimeout(() => lockInputRef.current?.focus(), 50)
+    } finally {
+      setLockPwLoading(false)
+    }
+  }
 
   // 주간: 새 canonical 전용 엔드포인트 사용
   const { data: weeklyData, isLoading: weeklyLoading } = useQuery<WeeklySummaryResponse>({
@@ -104,6 +142,22 @@ export function Insights() {
     (generateMutation.error as any)?.response?.data?.error ??
     '이 기간에 일기가 없거나 분석에 실패했어요.'
 
+  // 특정 기간에 잠긴 일기가 포함되는지 확인
+  const isPeriodLocked = (p: PatternLog): boolean => {
+    if (!hasLockPassword || isUnlocked) return false
+    const entries = allEntriesData?.entries ?? []
+    return entries.some(
+      (e) => e.is_locked && e.entry_date >= p.period_start && e.entry_date <= p.period_end
+    )
+  }
+
+  // 현재 탭에 잠긴 기간이 하나라도 있는지
+  const currentTabPatterns: PatternLog[] =
+    tab === 'weekly'
+      ? [...(weeklyData?.this_week ? [weeklyData.this_week] : []), ...(weeklyData?.past_weeks ?? [])]
+      : currentNonWeeklyLogs
+  const hasLockedInCurrentTab = hasLockPassword && !isUnlocked && currentTabPatterns.some(isPeriodLocked)
+
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-5">
@@ -143,6 +197,30 @@ export function Insights() {
           </button>
         </div>
 
+        {/* 잠긴 기간 잠금 해제 배너 */}
+        {hasLockedInCurrentTab && (
+          <form onSubmit={handleVerify} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+            <span className="text-base shrink-0">🔒</span>
+            <span className="text-xs text-gray-500 shrink-0">잠긴 일기 포함</span>
+            <input
+              ref={lockInputRef}
+              type="password"
+              value={lockPw}
+              onChange={(e) => { setLockPw(e.target.value); setLockPwError('') }}
+              placeholder="비밀번호"
+              className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-primary-400"
+            />
+            <button
+              type="submit"
+              disabled={!lockPw || lockPwLoading}
+              className="shrink-0 text-xs bg-primary-500 text-white px-3 py-1.5 rounded-lg disabled:opacity-50"
+            >
+              {lockPwLoading ? '...' : '열람'}
+            </button>
+            {lockPwError && <p className="text-xs text-red-500 shrink-0">{lockPwError}</p>}
+          </form>
+        )}
+
         {/* 피드백 */}
         {generateMutation.isError && (
           <div className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{errorMsg}</div>
@@ -163,13 +241,17 @@ export function Insights() {
           /* 주간 탭: this_week + past_weeks (각 캘린더 주 정확히 1개) */
           <div className="space-y-3">
             {weeklyData?.this_week ? (
-              <PatternCard
-                key={weeklyData.this_week.id}
-                pattern={weeklyData.this_week}
-                defaultExpanded={true}
-                onUpdate={handlePatternUpdate}
-                onDelete={handlePatternDelete}
-              />
+              isPeriodLocked(weeklyData.this_week) ? (
+                <LockedPeriodCard key={weeklyData.this_week.id} pattern={weeklyData.this_week} />
+              ) : (
+                <PatternCard
+                  key={weeklyData.this_week.id}
+                  pattern={weeklyData.this_week}
+                  defaultExpanded={true}
+                  onUpdate={handlePatternUpdate}
+                  onDelete={handlePatternDelete}
+                />
+              )
             ) : (
               <div className="card p-6 text-center text-gray-400 space-y-2">
                 <p className="text-sm">이번 주 분석이 아직 없어요.</p>
@@ -179,29 +261,37 @@ export function Insights() {
             {(weeklyData?.past_weeks ?? []).length > 0 && (
               <>
                 <p className="text-xs text-gray-400 pt-1">지난 주간 기록</p>
-                {weeklyData!.past_weeks.map((p) => (
-                  <PatternCard
-                    key={p.id}
-                    pattern={p}
-                    defaultExpanded={false}
-                    onUpdate={handlePatternUpdate}
-                    onDelete={handlePatternDelete}
-                  />
-                ))}
+                {weeklyData!.past_weeks.map((p) =>
+                  isPeriodLocked(p) ? (
+                    <LockedPeriodCard key={p.id} pattern={p} />
+                  ) : (
+                    <PatternCard
+                      key={p.id}
+                      pattern={p}
+                      defaultExpanded={false}
+                      onUpdate={handlePatternUpdate}
+                      onDelete={handlePatternDelete}
+                    />
+                  )
+                )}
               </>
             )}
           </div>
         ) : currentNonWeeklyLogs.length > 0 ? (
           <div className="space-y-3">
-            {currentNonWeeklyLogs.map((p, i) => (
-              <PatternCard
-                key={p.id}
-                pattern={p}
-                defaultExpanded={i === 0}
-                onUpdate={handlePatternUpdate}
-                onDelete={handlePatternDelete}
-              />
-            ))}
+            {currentNonWeeklyLogs.map((p, i) =>
+              isPeriodLocked(p) ? (
+                <LockedPeriodCard key={p.id} pattern={p} />
+              ) : (
+                <PatternCard
+                  key={p.id}
+                  pattern={p}
+                  defaultExpanded={i === 0}
+                  onUpdate={handlePatternUpdate}
+                  onDelete={handlePatternDelete}
+                />
+              )
+            )}
           </div>
         ) : (
           <div className="card p-6 text-center text-gray-400 space-y-2">
