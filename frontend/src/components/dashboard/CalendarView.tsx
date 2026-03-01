@@ -42,7 +42,11 @@ export function CalendarView({ weekStartDay = 0 }: { weekStartDay?: number }) {
   const firstDayOfWeek = (getDay(startOfMonth(currentMonth)) - jsWeekStart + 7) % 7
 
   const handleDayClick = (day: CalendarDay) => {
-    navigate(`/entry/${day.date}`)
+    if (day.has_entry && !day.is_draft && day.entry_id) {
+      navigate(`/view/${day.entry_id}`)
+    } else {
+      navigate(`/entry/${day.date}`)
+    }
   }
 
   return (

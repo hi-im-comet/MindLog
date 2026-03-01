@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
@@ -8,6 +8,7 @@ import { Layout } from '@/components/shared/Layout'
 import { ConversationPanel } from '@/components/conversation/ConversationPanel'
 import { conversationsApi } from '@/api/conversations'
 import { entriesApi } from '@/api/entries'
+import { usersApi } from '@/api/users'
 import { useAuthStore } from '@/store/authStore'
 import { MOOD_OPTIONS, type AiMood } from '@/constants/aiMood'
 import type { ResponseMode } from '@/types/conversation'
@@ -19,10 +20,33 @@ export function EntryChat() {
   const { user } = useAuthStore()
   const aiName = user?.profile?.ai_name ?? undefined
   const userName = user?.display_name ?? undefined
+  const hasLockPassword = user?.profile?.has_lock_password ?? false
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [activeMood, setActiveMood] = useState<AiMood>(
     (user?.profile?.ai_mood_default as AiMood) || 'empathy'
   )
+  const [isUnlocked, setIsUnlocked] = useState(false)
+  const [lockPw, setLockPw] = useState('')
+  const [lockPwError, setLockPwError] = useState('')
+  const [lockPwLoading, setLockPwLoading] = useState(false)
+  const lockInputRef = useRef<HTMLInputElement>(null)
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!lockPw || lockPwLoading) return
+    setLockPwLoading(true)
+    setLockPwError('')
+    try {
+      await usersApi.verifyLock(lockPw)
+      setIsUnlocked(true)
+    } catch {
+      setLockPwError('비밀번호가 일치하지 않아요.')
+      setLockPw('')
+      setTimeout(() => lockInputRef.current?.focus(), 50)
+    } finally {
+      setLockPwLoading(false)
+    }
+  }
 
   const { data: entry, isLoading: entryLoading } = useQuery({
     queryKey: ['entry', id],
@@ -78,6 +102,39 @@ export function EntryChat() {
           <Link to="/dashboard" className="text-primary-500 text-sm mt-2 inline-block">홈으로</Link>
         </div>
       </Layout>
+    )
+  }
+
+  if (entry.is_locked && hasLockPassword && !isUnlocked) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/70 backdrop-blur-sm">
+        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm mx-4 space-y-5">
+          <div className="text-center space-y-1">
+            <p className="text-4xl">🔒</p>
+            <h2 className="text-lg font-bold text-gray-800">잠긴 일기예요</h2>
+            <p className="text-sm text-gray-500">비밀번호를 입력하면 볼 수 있어요.</p>
+          </div>
+          <form onSubmit={handleVerify} className="space-y-3">
+            <input
+              ref={lockInputRef}
+              type="password"
+              value={lockPw}
+              onChange={(e) => { setLockPw(e.target.value); setLockPwError('') }}
+              placeholder="비밀번호"
+              autoFocus
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+            />
+            {lockPwError && <p className="text-xs text-red-500">{lockPwError}</p>}
+            <button
+              type="submit"
+              disabled={!lockPw || lockPwLoading}
+              className="w-full btn-primary text-sm disabled:opacity-60"
+            >
+              {lockPwLoading ? '확인 중...' : '열람하기'}
+            </button>
+          </form>
+        </div>
+      </div>
     )
   }
 

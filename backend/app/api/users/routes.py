@@ -45,6 +45,7 @@ class UserUpdateSchema(Schema):
         validate=validate.Regexp(r'^([01]\d|2[0-3]):[0-5]\d$', error='HH:MM 형식이어야 합니다.')
     )
     week_start_day = fields.Integer(validate=validate.Range(min=0, max=6))
+    daily_lock_enabled = fields.Boolean()
     # entry_lock_enabled은 setup-lock / disable-lock 전용 엔드포인트로만 변경 가능
 
 
@@ -92,6 +93,7 @@ def update_me():
     daily_message_enabled = data.pop('daily_message_enabled', ...)
     daily_message_time = data.pop('daily_message_time', ...)
     week_start_day = data.pop('week_start_day', ...)
+    daily_lock_enabled = data.pop('daily_lock_enabled', ...)
 
     for key, value in data.items():
         setattr(user, key, value)
@@ -122,6 +124,8 @@ def update_me():
         user.profile.daily_message_time = daily_message_time
     if week_start_day is not ...:
         user.profile.week_start_day = week_start_day
+    if daily_lock_enabled is not ...:
+        user.profile.daily_lock_enabled = daily_lock_enabled
 
     db.session.commit()
     return api_response({'user': user.to_dict(include_profile=True)})
@@ -192,7 +196,7 @@ def setup_lock():
         user.profile = UserProfile(user_id=user_id)
         db.session.add(user.profile)
 
-    user.profile.lock_password_hash = generate_password_hash(password)
+    user.profile.lock_password_hash = generate_password_hash(password, method='pbkdf2:sha256')
     user.profile.entry_lock_enabled = True
     db.session.commit()
     return api_response({'user': user.to_dict(include_profile=True)})
@@ -248,7 +252,7 @@ def change_lock_password():
         if not check_password_hash(user.profile.lock_password_hash, current_password):
             return api_error('현재 비밀번호가 일치하지 않아요.', 401)
 
-    user.profile.lock_password_hash = generate_password_hash(new_password)
+    user.profile.lock_password_hash = generate_password_hash(new_password, method='pbkdf2:sha256')
     db.session.commit()
     return api_response({'user': user.to_dict(include_profile=True)})
 
