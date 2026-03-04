@@ -347,6 +347,7 @@ def export_me():
             'display_name': user.display_name,
             'email': user.email,
             'created_at': user.created_at.isoformat() if user.created_at else None,
+            'ai_name': user.profile.ai_name if user.profile else None,
         },
         'entries': [entry_with_conversation(e) for e in entries],
         'patterns': [p.to_dict() for p in patterns],

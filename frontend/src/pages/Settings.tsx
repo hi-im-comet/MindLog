@@ -12,6 +12,7 @@ import { Layout } from '@/components/shared/Layout'
 import { useAuthStore } from '@/store/authStore'
 import { usersApi } from '@/api/users'
 import { MOOD_OPTIONS, LENGTH_OPTIONS, MOOD_LENGTH_PRESET } from '@/constants/aiMood'
+import { wa } from '@/utils/josa'
 
 const TIMEZONE_OPTIONS = [
   { value: 'Asia/Seoul', label: '서울 (KST, UTC+9)' },
@@ -82,10 +83,11 @@ function buildTxt(exportData: any): string {
       }
     }
     if (entry.conversation?.messages?.length > 0) {
+      const aiName = exportData.user?.ai_name || 'AI'
       lines.push('')
-      lines.push('[AI와의 대화]')
+      lines.push(`[${aiName}${wa(aiName)}의 대화]`)
       for (const msg of entry.conversation.messages) {
-        const speaker = msg.role === 'user' ? '나' : (exportData.user?.ai_name || 'AI')
+        const speaker = msg.role === 'user' ? '나' : aiName
         lines.push(`${speaker}: ${msg.content}`)
       }
     }
@@ -125,7 +127,7 @@ function openPrintWindow(exportData: any): void {
       const aiName = exportData.user?.ai_name || 'AI'
       const conversation =
         entry.conversation?.messages?.length > 0
-          ? `<div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;"><p style="font-size:12px;font-weight:600;color:#888;margin-bottom:8px;">AI와의 대화</p>${entry.conversation.messages.map((m: any) => {
+          ? `<div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;"><p style="font-size:12px;font-weight:600;color:#888;margin-bottom:8px;">${aiName}${wa(aiName)}의 대화</p>${entry.conversation.messages.map((m: any) => {
             const speaker = m.role === 'user' ? '나' : aiName
             const bg = m.role === 'user' ? '#f0f4ff' : '#f8f8f8'
             const align = m.role === 'user' ? 'right' : 'left'

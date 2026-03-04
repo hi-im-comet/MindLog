@@ -327,6 +327,12 @@ def send_message(conv_id):
 
         except Exception as e:
             logger.error(f'SSE 스트리밍 오류: {e}')
+            # AI 응답 저장 실패 시 이미 커밋된 user_msg도 삭제해 고아 메시지 방지
+            try:
+                db.session.delete(user_msg)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
             yield _sse_line({'type': 'error', 'message': 'AI 응답 중 오류가 발생했습니다.'})
 
     return Response(
