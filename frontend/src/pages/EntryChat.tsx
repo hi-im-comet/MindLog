@@ -213,6 +213,7 @@ export function EntryChat() {
               conversation={conversation}
               aiName={aiName}
               userName={userName}
+              initialLength={entry.ai_response_length_override || user?.profile?.ai_response_length_default || 'normal'}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-300 text-sm">

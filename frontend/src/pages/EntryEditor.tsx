@@ -12,6 +12,7 @@ import { usersApi } from '@/api/users'
 import { remindersApi } from '@/api/reminders'
 import { useAuthStore } from '@/store/authStore'
 import { CrisisResourceBanner } from '@/components/conversation/CrisisResourceBanner'
+import { ResponseModeSelector } from '@/components/conversation/ResponseModeSelector'
 import { ReminderCreateModal } from '@/components/reminders/ReminderCreateModal'
 import { MOOD_OPTIONS, LENGTH_OPTIONS } from '@/constants/aiMood'
 import type { Conversation, ConversationMessage, ResponseMode } from '@/types/conversation'
@@ -439,6 +440,33 @@ export function EntryEditor() {
             >
               기록 마치기
             </button>
+          </div>
+        </div>
+
+        {/* 응답 스타일 */}
+        <div className="pt-2 pb-1 flex-shrink-0">
+          <ResponseModeSelector
+            value={activeMood as ResponseMode}
+            onChange={(mode) => handleMoodChange(mode)}
+            disabled={isSending}
+          />
+          <div className="flex gap-1.5 mt-1.5">
+            {LENGTH_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => handleLengthChange(opt.value)}
+                disabled={isSending}
+                className={clsx(
+                  'flex-1 py-1 rounded-lg text-xs font-medium transition-colors border',
+                  activeLength === opt.value
+                    ? 'bg-primary-50 border-primary-300 text-primary-700'
+                    : 'bg-white border-gray-100 text-gray-500 hover:border-gray-200 hover:text-gray-700',
+                  isSending && 'opacity-50 cursor-not-allowed',
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
         </div>
 

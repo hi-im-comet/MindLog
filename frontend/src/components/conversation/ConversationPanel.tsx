@@ -2,9 +2,11 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { clsx } from 'clsx'
 import { conversationsApi } from '@/api/conversations'
+import { entriesApi } from '@/api/entries'
 import { ResponseModeSelector } from './ResponseModeSelector'
 import { CrisisResourceBanner } from './CrisisResourceBanner'
 import { ga } from '@/utils/josa'
+import { LENGTH_OPTIONS } from '@/constants/aiMood'
 import type { Conversation, ConversationMessage, ResponseMode } from '@/types/conversation'
 
 interface Props {
@@ -12,10 +14,12 @@ interface Props {
   onModeChange?: (newConv: Conversation) => void
   aiName?: string
   userName?: string
+  initialLength?: string
 }
 
-export function ConversationPanel({ conversation: initialConv, onModeChange, aiName, userName }: Props) {
+export function ConversationPanel({ conversation: initialConv, onModeChange, aiName, userName, initialLength = 'normal' }: Props) {
   const [conv, setConv] = useState<Conversation>(initialConv)
+  const [activeLength, setActiveLength] = useState(initialLength)
   const [messages, setMessages] = useState<ConversationMessage[]>(initialConv.messages ?? [])
   const [inputValue, setInputValue] = useState('')
   const [isSending, setIsSending] = useState(false)
@@ -47,6 +51,15 @@ export function ConversationPanel({ conversation: initialConv, onModeChange, aiN
       onModeChange?.({ ...conv, ...updated })
     } catch {
       // mode change is best-effort
+    }
+  }
+
+  const handleLengthChange = async (len: string) => {
+    setActiveLength(len)
+    try {
+      await entriesApi.update(conv.entry_id, { ai_response_length_override: len })
+    } catch {
+      // best-effort
     }
   }
 
@@ -184,6 +197,24 @@ export function ConversationPanel({ conversation: initialConv, onModeChange, aiN
           onChange={handleModeChange}
           disabled={isSending || selectionMode}
         />
+        <div className="flex gap-1.5 mt-1.5">
+          {LENGTH_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => handleLengthChange(opt.value)}
+              disabled={isSending || selectionMode}
+              className={clsx(
+                'flex-1 py-1 rounded-lg text-xs font-medium transition-colors border',
+                activeLength === opt.value
+                  ? 'bg-primary-50 border-primary-300 text-primary-700'
+                  : 'bg-white border-gray-100 text-gray-500 hover:border-gray-200 hover:text-gray-700',
+                (isSending || selectionMode) && 'opacity-50 cursor-not-allowed',
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Crisis banner */}
