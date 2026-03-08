@@ -326,7 +326,7 @@ def export_me():
     user = User.query.filter_by(id=user_id).first_or_404()
 
     entries = (JournalEntry.query
-               .filter_by(user_id=user_id)
+               .filter_by(user_id=user_id, is_draft=False)
                .filter(JournalEntry.deleted_at.is_(None))
                .order_by(JournalEntry.entry_date.desc())
                .all())

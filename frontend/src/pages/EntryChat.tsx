@@ -206,24 +206,6 @@ export function EntryChat() {
           )}
         </div>
 
-        {/* 무드 칩 */}
-        <div className="flex items-center gap-1 py-2 flex-shrink-0 overflow-x-auto">
-          {MOOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => handleMoodChange(opt.value)}
-              className={clsx(
-                'flex-shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors',
-                displayMood === opt.value
-                  ? 'border-primary-400 bg-primary-50 text-primary-600 font-medium'
-                  : 'border-gray-200 text-gray-400 hover:border-gray-300',
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
         {/* Conversation */}
         <div className="flex-1 min-h-0">
           {conversation ? (

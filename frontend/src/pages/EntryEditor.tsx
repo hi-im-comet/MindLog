@@ -398,7 +398,6 @@ export function EntryEditor() {
         <div className="flex items-center justify-between pb-3 border-b border-gray-50 flex-shrink-0">
           <div>
             <h2 className="text-base font-bold text-gray-800">{dateLabel}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">오늘 하루를 자유롭게 이야기해보세요</p>
           </div>
           <div className="flex items-center gap-2">
             {entryId && (
@@ -441,39 +440,6 @@ export function EntryEditor() {
               기록 마치기
             </button>
           </div>
-        </div>
-
-        {/* 무드/길이 칩 */}
-        <div className="flex items-center gap-1 pt-2 pb-1 flex-shrink-0 overflow-x-auto">
-          {MOOD_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => handleMoodChange(opt.value)}
-              className={clsx(
-                'flex-shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors',
-                activeMood === opt.value
-                  ? 'border-primary-400 bg-primary-50 text-primary-600 font-medium'
-                  : 'border-gray-200 text-gray-400 hover:border-gray-300',
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-          <span className="flex-shrink-0 text-gray-200 mx-1 select-none">|</span>
-          {LENGTH_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => handleLengthChange(opt.value)}
-              className={clsx(
-                'flex-shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors',
-                activeLength === opt.value
-                  ? 'border-primary-400 bg-primary-50 text-primary-600 font-medium'
-                  : 'border-gray-200 text-gray-400 hover:border-gray-300',
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
         </div>
 
         {/* Crisis banner */}

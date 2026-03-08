@@ -162,6 +162,7 @@ def start_or_get_conversation():
         opener_system = build_chat_opener_system(
             user_name=_user.display_name if _user else None,
             ai_name=_profile.ai_name if _profile else None,
+            entry_date=str(entry.entry_date) if entry.entry_date else None,
         )
         opener_text, _ = call_claude(
             messages=[{'role': 'user', 'content': '안녕'}],

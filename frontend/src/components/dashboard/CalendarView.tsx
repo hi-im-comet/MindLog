@@ -99,7 +99,7 @@ export function CalendarView({ weekStartDay = 0 }: { weekStartDay?: number }) {
               disabled={isFuture}
               onClick={() => handleDayClick(day)}
               className={clsx(
-                'aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-medium transition-all',
+                'group aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-medium transition-all',
                 isFuture
                   ? 'text-gray-200 cursor-default'
                   : day.has_entry
@@ -108,15 +108,22 @@ export function CalendarView({ weekStartDay = 0 }: { weekStartDay?: number }) {
                         day.mood_score ? MOOD_BG[day.mood_score] : 'bg-primary-50',
                         'text-gray-700'
                       )
-                    : 'hover:bg-gray-50 text-gray-400 cursor-pointer',
+                    : 'hover:bg-primary-50 hover:text-primary-500 text-gray-300 cursor-pointer',
                 isToday && 'ring-2 ring-primary-400 ring-offset-1'
               )}
-              title={day.has_entry && day.summary ? day.summary : undefined}
+              title={
+                isFuture ? undefined
+                : day.has_entry && day.summary ? day.summary
+                : !day.has_entry ? '이 날 대화 시작하기'
+                : undefined
+              }
             >
               {d.getDate()}
-              {day.has_entry && (
+              {day.has_entry ? (
                 <span className="w-1 h-1 rounded-full bg-primary-400 mt-0.5" />
-              )}
+              ) : !isFuture ? (
+                <span className="w-1 h-1 rounded-full opacity-0 group-hover:opacity-100 bg-primary-300 mt-0.5 transition-opacity" />
+              ) : null}
             </button>
           )
         })}

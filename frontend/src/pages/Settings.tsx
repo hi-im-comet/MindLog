@@ -51,6 +51,18 @@ const FORMAT_OPTIONS: { value: ExportFormat; label: string; ext: string; ready: 
   { value: 'hwp', label: 'HWP', ext: '.hwp', ready: false },
 ]
 
+/** AI 응답 없이 남은 고아 사용자 메시지를 제거하고, 실제 대화가 있는 경우만 반환 */
+function filterConversationMessages(messages: any[]): any[] {
+  const filtered = messages.filter((msg, i, arr) => {
+    if (msg.role !== 'user') return true
+    // 이 user 메시지 이후에 assistant 메시지가 있는 경우만 포함
+    return arr.slice(i + 1).some((m) => m.role === 'assistant')
+  })
+  // AI 인삿말 1개만 남은 경우는 의미 있는 대화 없음 → 빈 배열 반환
+  const hasRealExchange = filtered.some((m) => m.role === 'user')
+  return hasRealExchange ? filtered : []
+}
+
 function buildTxt(exportData: any): string {
   const lines: string[] = []
   lines.push('📓 MindLog 내보내기')
@@ -82,11 +94,12 @@ function buildTxt(exportData: any): string {
         lines.push(`${seg.category}: ${seg.content}`)
       }
     }
-    if (entry.conversation?.messages?.length > 0) {
+    const convMsgs = filterConversationMessages(entry.conversation?.messages ?? [])
+    if (convMsgs.length > 0) {
       const aiName = exportData.user?.ai_name || 'AI'
       lines.push('')
       lines.push(`[${aiName}${wa(aiName)}의 대화]`)
-      for (const msg of entry.conversation.messages) {
+      for (const msg of convMsgs) {
         const speaker = msg.role === 'user' ? '나' : aiName
         lines.push(`${speaker}: ${msg.content}`)
       }
@@ -125,9 +138,10 @@ function openPrintWindow(exportData: any): void {
           ? `<div style="margin-top:12px;padding:10px;background:#f8f8f8;border-radius:8px;">${entry.category_segments.map((s: any) => `<p style="margin:4px 0;font-size:13px;"><b>${s.category}</b>: ${s.content}</p>`).join('')}</div>`
           : ''
       const aiName = exportData.user?.ai_name || 'AI'
+      const convMsgs = filterConversationMessages(entry.conversation?.messages ?? [])
       const conversation =
-        entry.conversation?.messages?.length > 0
-          ? `<div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;"><p style="font-size:12px;font-weight:600;color:#888;margin-bottom:8px;">${aiName}${wa(aiName)}의 대화</p>${entry.conversation.messages.map((m: any) => {
+        convMsgs.length > 0
+          ? `<div style="margin-top:16px;border-top:1px solid #eee;padding-top:12px;"><p style="font-size:12px;font-weight:600;color:#888;margin-bottom:8px;">${aiName}${wa(aiName)}의 대화</p>${convMsgs.map((m: any) => {
             const speaker = m.role === 'user' ? '나' : aiName
             const bg = m.role === 'user' ? '#f0f4ff' : '#f8f8f8'
             const align = m.role === 'user' ? 'right' : 'left'

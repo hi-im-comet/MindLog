@@ -225,13 +225,31 @@ def build_conversation_messages(
 def build_chat_opener_system(
     user_name: Optional[str] = None,
     ai_name: Optional[str] = None,
+    entry_date: Optional[str] = None,
 ) -> str:
     """대화 시작 시 AI가 먼저 건네는 opener 메시지용 system prompt."""
+    from datetime import date as _date
     identity = ai_name if ai_name else "따뜻하고 공감적인 마음 일기 동반자"
     name_part = f" {user_name}님께" if user_name else ""
+
+    today = str(_date.today())
+    is_past = entry_date and entry_date < today
+
+    if is_past:
+        # 과거 날짜: 그 날에 대한 이야기를 회고하러 온 맥락
+        try:
+            from datetime import datetime
+            d = datetime.strptime(entry_date, '%Y-%m-%d')
+            date_label = f"{d.month}월 {d.day}일"
+        except Exception:
+            date_label = entry_date
+        context = f"{date_label}의 이야기를 돌아보러 온{name_part} 사용자에게"
+    else:
+        context = f"오늘 일기를 쓰러 온{name_part} 사용자에게"
+
     return (
         f"당신은 {identity}입니다. "
-        f"오늘 일기를 쓰러 온{name_part} 사용자에게 자연스럽고 따뜻하게 첫 인사를 건네세요. "
+        f"{context} 자연스럽고 따뜻하게 첫 인사를 건네세요. "
         "1~2문장으로 짧게, 마크다운 없이 일반 텍스트로만 작성하세요. "
         "질문을 하나 곁들여도 좋지만 강요하지 마세요."
     )
