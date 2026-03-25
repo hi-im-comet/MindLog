@@ -59,10 +59,12 @@ export default function App() {
               path="/onboarding"
               element={<ProtectedRoute><Onboarding /></ProtectedRoute>}
             />
+            {/* 기록(캘린더): /calendar, /dashboard는 하위 호환 리다이렉트 */}
             <Route
-              path="/dashboard"
+              path="/calendar"
               element={<ProtectedRoute><Dashboard /></ProtectedRoute>}
             />
+            <Route path="/dashboard" element={<Navigate to="/calendar" replace />} />
             {/* 일기 에디터: /entry/2026-02-20 */}
             <Route
               path="/entry/:date"
@@ -100,8 +102,8 @@ export default function App() {
             />
 
             {/* Fallback */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={<Navigate to={`/entry/${new Date().toISOString().slice(0, 10)}`} replace />} />
+            <Route path="*" element={<Navigate to={`/entry/${new Date().toISOString().slice(0, 10)}`} replace />} />
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>

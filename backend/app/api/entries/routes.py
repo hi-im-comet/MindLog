@@ -434,3 +434,4 @@ def delete_entry(entry_id):
     db.session.delete(entry)
     db.session.commit()
     return api_response({'message': '대화가 삭제되었습니다.'})
+

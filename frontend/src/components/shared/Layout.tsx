@@ -84,13 +84,13 @@ export function Layout({ children }: Props) {
   const aiName = user?.profile?.ai_name
 
   const NAV_ITEMS: NavItem[] = [
-    { label: '홈', icon: '🏠', getTo: () => '/dashboard', matchPrefix: '/dashboard' },
     {
-      label: aiName ? `${aiName}${wa(aiName)} 대화` : '오늘 대화',
-      icon: '✏️',
+      label: aiName ? `${aiName}${wa(aiName)} 대화` : '대화',
+      icon: '💬',
       getTo: () => `/entry/${format(new Date(), 'yyyy-MM-dd')}`,
       matchPrefix: '/entry',
     },
+    { label: '기록', icon: '📅', getTo: () => '/calendar', matchPrefix: '/calendar' },
     { label: '인사이트', icon: '📊', getTo: () => '/insights', matchPrefix: '/insights' },
     { label: '알림', icon: '🔔', getTo: () => '/reminders', matchPrefix: '/reminders' },
   ]
@@ -118,7 +118,7 @@ export function Layout({ children }: Props) {
       {/* Top nav */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-40">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link to="/dashboard" className="text-lg font-bold text-primary-600 tracking-tight">
+          <Link to={`/entry/${new Date().toISOString().slice(0, 10)}`} className="text-lg font-bold text-primary-600 tracking-tight">
             MindLog
           </Link>
           <nav className="hidden sm:flex items-center gap-1">
